@@ -98,12 +98,12 @@ const setup = (app: App) => {
       // 코드블럭이 포함된 경우
       // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
       const blocks: Block[] | KnownBlock[] = response
-        .split(/\`\`\`/)
+        .split(/\`\`\`\s+/)
         .map((v, i) => {
           if (i % 2 === 0) {
             return Section({ text: Text(v) });
           } else {
-            return Section({ text: Markdown(v) });
+            return Section({ text: Markdown("```" + v + "```") });
           }
         });
 
