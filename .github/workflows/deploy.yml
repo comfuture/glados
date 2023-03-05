@@ -7,6 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
       SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
@@ -17,6 +18,7 @@ jobs:
     - name: make env file
       run: |
         echo SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN >> .env
+        echo SLACK_APP_TOKEN=$SLACK_APP_TOKEN >> .env
         echo SLACK_SIGNING_SECRET=$SLACK_SIGNING_SECRET >> .env
         echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
     - name: send files to server
