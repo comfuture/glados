@@ -101,9 +101,9 @@ const setup = (app: App) => {
         .split(/\`\`\`\s+/)
         .map((v, i) => {
           if (i % 2 === 0) {
-            return Section({ text: Text(v) });
-          } else {
             return Section({ text: Markdown("```" + v + "```") });
+          } else {
+            return Section({ text: Text(v) });
           }
         });
 
