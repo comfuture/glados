@@ -34,17 +34,18 @@ const setup = (app: App) => {
   console.info("Chat module loaded");
   app.message(async ({ message, body, say, context }) => {
     // 봇에게 직접 메시지를 보낸 경우
-    console.info("Message received: ", message, "body: ", body);
+    console.info("Message received: ", message);
 
     const isDirectMessage =
       message.channel_type === "im" || message.channel_type === "mpim";
 
     // 채널에서 봇을 언급한 경우
-    const isMentioned = body.text.includes(`<@${context.botUserId}>`);
+    // const isMentioned = message.text.includes(`<@${context.botUserId}>`);
+    const isMentioned = false;
 
     if ((isDirectMessage || isMentioned) && message.subtype === undefined) {
-      const content: string = body.text
-        .replace(`<@${context.botUserId}>`, "")
+      const content: string = message
+        .text!.replace(`<@${context.botUserId}>`, "")
         .trim();
 
       // 나쁜말 체크?

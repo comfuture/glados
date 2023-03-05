@@ -12,6 +12,10 @@ export const app = new App({
   socketMode: true,
 });
 
+app.use(async ({ next }) => {
+  await next();
+});
+
 (async () => {
   // load modules
   image.setup(app);
