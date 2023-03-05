@@ -78,7 +78,7 @@ const setup = (app: App) => {
 
     // 메시지에 이모티콘 붙이기
     app.client.reactions.add({
-      name: "check",
+      name: "white_check_mark",
       channel: message.channel,
       timestamp: message.ts,
     });
@@ -101,7 +101,7 @@ const setup = (app: App) => {
         .split(/\`\`\`/)
         .map((v, i) => {
           if (i % 2 === 0) {
-            return Text(v);
+            return Section({ text: Text(v) });
           } else {
             return Section({ text: Markdown(v) });
           }
