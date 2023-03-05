@@ -1,4 +1,4 @@
-import { App } from "@slack/bolt";
+import { App, GenericMessageEvent } from "@slack/bolt";
 import { Block, KnownBlock } from "@slack/types";
 
 import type {
@@ -32,63 +32,73 @@ const saveHistory = (
 
 const setup = (app: App) => {
   console.info("Chat module loaded");
-  app.message(async ({ message, body, say, context }) => {
+  app.message(async ({ message: _message, say, context }) => {
+    const message: GenericMessageEvent = _message as GenericMessageEvent;
     // 봇에게 직접 메시지를 보낸 경우
     console.info("Message received: ", message);
 
+    // DM 또는 멀티채널에서 봇을 언급한 경우
     const isDirectMessage =
       message.channel_type === "im" || message.channel_type === "mpim";
 
     // 채널에서 봇을 언급한 경우
-    // const isMentioned = message.text.includes(`<@${context.botUserId}>`);
-    const isMentioned = false;
+    const isMentioned = message.text?.includes(`<@${context.botUserId}>`);
 
-    if ((isDirectMessage || isMentioned) && message.subtype === undefined) {
-      const content: string = message
-        .text!.replace(`<@${context.botUserId}>`, "")
-        .trim();
+    // 봇에게 직접 메시지를 보낸 경우 또는 채널에서 봇을 언급한 경우가 아니면 무시
+    if (!(isDirectMessage || isMentioned)) {
+      return;
+    }
 
-      // 나쁜말 체크?
-      const moderationResult = await openai.createModeration({
-        input: content,
-      });
-      for (const check of moderationResult.data.results) {
-        if (Object.values(check.categories).some((v) => v)) {
-          await say("나쁜말 하지마세요");
-          return;
-        }
+    const content: string | undefined = message.text
+      ?.replace(`<@${context.botUserId}>`, "")
+      .trim();
+
+    // 내용이 없는 경우 무시
+    if (!content) {
+      return;
+    }
+
+    // 나쁜말 체크?
+    const moderationResult = await openai.createModeration({
+      input: content,
+    });
+
+    for (const check of moderationResult.data.results) {
+      if (Object.values(check.categories).some((v) => v)) {
+        await say("나쁜말 하지마세요");
+        return;
       }
+    }
 
-      saveHistory(message.user, content);
-      const result = await openai.createChatCompletion({
-        model: "gpt-3.5-turbo",
-        messages: [BOT_CHARACTER, { role: "user", content }],
-        max_tokens: 1024,
-        temperature: 0.6,
-        frequency_penalty: 0.4,
-      });
+    saveHistory(message.user, content);
+    const result = await openai.createChatCompletion({
+      model: "gpt-3.5-turbo",
+      messages: [BOT_CHARACTER, { role: "user", content }],
+      max_tokens: 1024,
+      temperature: 0.6,
+      frequency_penalty: 0.4,
+    });
 
-      const aiSays = result.data.choices[0].message?.content!.trim()!;
-      saveHistory(message.user, aiSays, "assistant");
-      if (/\`\`\`/.test(aiSays)) {
-        // 코드블럭이 포함된 경우
-        // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
-        const blocks: Block[] | KnownBlock[] = aiSays
-          .split(/\`\`\`/)
-          .map((v, i) => {
-            if (i % 2 === 0) {
-              return Text(v);
-            } else {
-              return Section({ text: Markdown(v) });
-            }
-          });
-
-        await say({
-          blocks,
+    const aiSays = result.data.choices[0].message?.content!.trim()!;
+    saveHistory(message.user, aiSays, "assistant");
+    if (/\`\`\`/.test(aiSays)) {
+      // 코드블럭이 포함된 경우
+      // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
+      const blocks: Block[] | KnownBlock[] = aiSays
+        .split(/\`\`\`/)
+        .map((v, i) => {
+          if (i % 2 === 0) {
+            return Text(v);
+          } else {
+            return Section({ text: Markdown(v) });
+          }
         });
-      } else {
-        await say(aiSays);
-      }
+
+      await say({
+        blocks,
+      });
+    } else {
+      await say(aiSays);
     }
   });
 };
