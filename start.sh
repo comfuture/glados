@@ -1,3 +1,3 @@
 #!/bin/bash
-. /home/myapp/.nvm/nvm.sh
+. /home/ubuntu/.nvm/nvm.sh
 yarn serve
