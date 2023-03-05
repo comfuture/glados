@@ -1,5 +1,6 @@
 import { App, GenericMessageEvent } from "@slack/bolt";
 import { Block, KnownBlock } from "@slack/types";
+import { ClientRequest } from "http";
 
 import type {
   ChatCompletionRequestMessage,
@@ -28,6 +29,11 @@ const saveHistory = (
     HISTORY[owner] = [];
   }
   HISTORY[owner].push({ role, content });
+};
+
+/** 특정 사용자의 히스토리를 제거 */
+const clearHistory = (owner: string) => {
+  HISTORY[owner] = [];
 };
 
 const setup = (app: App) => {
@@ -69,6 +75,13 @@ const setup = (app: App) => {
         return;
       }
     }
+
+    // 메시지에 이모티콘 붙이기
+    app.client.reactions.add({
+      name: "check",
+      channel: message.channel,
+      timestamp: message.ts,
+    });
 
     saveHistory(message.user, content);
     const result = await openai.createChatCompletion({
