@@ -34,7 +34,7 @@ const setup = (app: App) => {
   console.info("Chat module loaded");
   app.message(async ({ message, body, say, context }) => {
     // 봇에게 직접 메시지를 보낸 경우
-    console.info("Message received: ", message);
+    console.info("Message received: ", message, "body: ", body);
 
     const isDirectMessage =
       message.channel_type === "im" || message.channel_type === "mpim";
