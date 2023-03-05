@@ -21,7 +21,7 @@ jobs:
     - name: send files to server
       run: |
         sh -c "rsync -avzO --delete --exclude=__pycache__ \
-           -e 'ssh -o StrictHostKeyChecking=no' src/ ubuntu@glados.changkyun.kim:service/glados"
+           -e 'ssh -o StrictHostKeyChecking=no' . ubuntu@glados.changkyun.kim:service/glados"
     - name: install dependencies
       run: |
         ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c "cd service/glados && yarn"'
