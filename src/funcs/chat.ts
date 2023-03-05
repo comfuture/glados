@@ -108,6 +108,7 @@ const setup = (app: App) => {
         });
 
       await say({
+        text: response,
         blocks,
       });
     } else {
