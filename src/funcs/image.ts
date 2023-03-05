@@ -24,6 +24,11 @@ const setup = (app: App) => {
     });
     const imageUrls = response.data.data as { url: string }[];
     await client.chat.delete({ ts: loading.ts!, channel: command.channel_id });
+    await client.files.uploadV2({
+      channels: command.channel_id,
+      file: imageUrls[0].url,
+      alt_text: command.text,
+    });
     await say({
       blocks: [
         Image(imageUrls[0].url, command.text, { title: Text(command.text) }),
