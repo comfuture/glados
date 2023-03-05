@@ -1,0 +1,30 @@
+on:
+  push:
+    branches:
+    - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_KEY }}
+    - name: make env file
+      uses: comfuture/actions/writefile@master
+      with:
+        filename: .env
+        content: |
+          SLACK_BOT_TOKEN={{ secrets.SLACK_BOT_TOKEN }}}
+          SLACK_SIGNING_SECRET={{ secrets.SLACK_SIGNING_SECRET }}
+          OPENAI_API_KEY={{ secrets.OPENAI_API_KEY }}
+    - name: send files to server
+      run: |
+        sh -c "rsync -avzO --delete --exclude=__pycache__ \
+           -e 'ssh -o StrictHostKeyChecking=no' src/ ubuntu@glados.changkyun.kim:service/glados"
+    - name: install dependencies
+      run: |
+        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c "cd service/glados && yarn'
+    - name: restart service
+      run: |
+        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c "sudo systemctl restart glados.service"'
