@@ -92,12 +92,12 @@ const setup = (app: App) => {
       frequency_penalty: 0.4,
     });
 
-    const aiSays = result.data.choices[0].message?.content!.trim()!;
-    saveHistory(message.user, aiSays, "assistant");
-    if (/\`\`\`/.test(aiSays)) {
+    const response = result.data.choices[0].message?.content!.trim()!;
+    saveHistory(message.user, response, "assistant");
+    if (/\`\`\`/.test(response)) {
       // 코드블럭이 포함된 경우
       // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
-      const blocks: Block[] | KnownBlock[] = aiSays
+      const blocks: Block[] | KnownBlock[] = response
         .split(/\`\`\`/)
         .map((v, i) => {
           if (i % 2 === 0) {
@@ -111,7 +111,7 @@ const setup = (app: App) => {
         blocks,
       });
     } else {
-      await say(aiSays);
+      await say(response);
     }
   });
 };

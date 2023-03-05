@@ -42,10 +42,15 @@ export const Button = (
   style,
 });
 
-export const Image = (imageUrl: string, altText: string): ImageBlock => ({
+export const Image = (
+  imageUrl: string,
+  altText: string,
+  { title }: { title?: PlainTextElement } = {}
+): ImageBlock => ({
   type: "image",
   image_url: imageUrl,
   alt_text: altText,
+  title,
 });
 
 export const Section = ({ ...props }): SectionBlock => ({

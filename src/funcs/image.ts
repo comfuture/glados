@@ -26,11 +26,7 @@ const setup = (app: App) => {
     await client.chat.delete({ ts: loading.ts!, channel: command.channel_id });
     await say({
       blocks: [
-        Image(imageUrls[0].url, command.text),
-        Text(command.text),
-        Context([
-          Button("다시 그리기", { id: "draw_image", value: command.text }),
-        ]),
+        Image(imageUrls[0].url, command.text, { title: Text(command.text) }),
       ],
     });
   });
