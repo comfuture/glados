@@ -107,6 +107,7 @@ const setup = (app: App) => {
       max_tokens: 1024,
       temperature: 0.6,
       frequency_penalty: 0.4,
+      user: message.user,
     });
 
     const response = result.data.choices[0].message?.content!.trim()!;
@@ -129,10 +130,10 @@ const setup = (app: App) => {
           if (i % 2 === 0) {
             return Section({ text: Markdown(v) });
           } else {
-            const langaugeMatch = /^\s*(\S+)/.exec(v);
+            const langaugeMatch = /^(#?\S+)/.exec(v);
             if (langaugeMatch) {
               langaugeMatch[1];
-              v = v.replace(new RegExp("^(\\s*)" + langaugeMatch[1]), "$1");
+              v = v.replace(/^(#?\S+)/, "");
             }
             return Section({
               text: Markdown("```" + v + "```"),
@@ -172,21 +173,34 @@ const setup = (app: App) => {
   app.event("app_mention", async ({ event, say, client }) => {
     if (event.thread_ts) {
       // TODO: 스레드에서 언급한 경우, 스레드의 첫 메시지를 가져와 응답
-      // const thread = await client.conversations.replies({
-      //   channel: event.channel,
-      //   ts: event.thread_ts,
-      //   limit: 1,
-      // });
-      // thread.messages;
+      const thread = await client.conversations.replies({
+        channel: event.channel,
+        ts: event.thread_ts,
+        limit: 1,
+      });
+      for (const message of thread.messages ?? []) {
+        console.log(message);
+        await say({
+          text: message.text,
+          thread_ts: message.thread_ts,
+        });
+      }
     } else {
       // TODO: 유저의 최근 대화를 n개 가져와 응답
-      // const history = await client.conversations.history({
-      //   channel: event.channel,
-      //   user: event.user,
-      //   latest: event.ts,
-      //   inclusive: false,
-      // });
-      // history.messages;
+      const history = await client.conversations.history({
+        channel: event.channel,
+        user: event.user,
+        latest: event.ts,
+        inclusive: false,
+      });
+      history.messages;
+      for (const message of history.messages ?? []) {
+        console.log(message);
+        await say({
+          text: message.text,
+          thread_ts: message.thread_ts,
+        });
+      }
     }
   });
 };
