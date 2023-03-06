@@ -91,9 +91,9 @@ const setup = (app: App) => {
       }
     }
 
-    // 메시지에 이모티콘 붙이기
+    // 메시지에 모래시계 이모티콘 붙이기
     app.client.reactions.add({
-      name: "white_check_mark",
+      name: "hourclass",
       channel: message.channel,
       timestamp: message.ts,
     });
@@ -111,6 +111,14 @@ const setup = (app: App) => {
 
     const response = result.data.choices[0].message?.content!.trim()!;
     session.addHistory(response, "assistant");
+
+    // 메시지에서 모래시계 이모티콘 제거
+    app.client.reactions.remove({
+      name: "hourclass",
+      channel: message.channel,
+      timestamp: message.ts,
+    });
+
     if (/\`\`\`/.test(response)) {
       // 코드블럭이 포함된 경우
       // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
