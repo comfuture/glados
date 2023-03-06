@@ -63,8 +63,14 @@ const setup = (app: App) => {
     // 채널에서 봇을 언급한 경우
     const isMentioned = message.text?.includes(`<@${context.botUserId}>`);
 
-    // 봇에게 직접 메시지를 보낸 경우 또는 채널에서 봇을 언급한 경우가 아니면 무시
-    if (!(isDirectMessage || isMentioned)) {
+    // 봇에게 직접 메시지를 보낸 경우 또는 채널에서 봇을 언급한 경우 또는 세션이 활성화된 경우가 아니면 무시
+    if (
+      !(
+        isDirectMessage ||
+        isMentioned ||
+        SessionManager.hasSession(message.user)
+      )
+    ) {
       return;
     }
 

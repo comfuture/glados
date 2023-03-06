@@ -88,6 +88,10 @@ export class SessionManager {
     return session;
   }
 
+  public static hasSession(user: string): boolean {
+    return this.sessions.has(user) && !this.sessions.get(user)?.isRotten();
+  }
+
   public static clearSession(user: string) {
     this.sessions.delete(user);
   }
