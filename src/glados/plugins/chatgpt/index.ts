@@ -12,6 +12,7 @@ import openai from "../../utils/openai";
 
 import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
+import { chatCompletion, formatResponse } from "./handlers";
 
 // 캐릭터 셋업
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
@@ -99,19 +100,7 @@ const setup = (app: App) => {
     });
 
     const session = SessionManager.getSession(message.user);
-    session.addHistory(content);
-
-    const result = await openai.createChatCompletion({
-      model: "gpt-3.5-turbo",
-      messages: [BOT_CHARACTER, ...session.getHistory()],
-      max_tokens: 1024,
-      temperature: 0.6,
-      frequency_penalty: 0.4,
-      user: message.user,
-    });
-
-    const response = result.data.choices[0].message?.content!.trim()!;
-    session.addHistory(response, "assistant");
+    const response = await chatCompletion(content, session);
 
     // 메시지에서 모래시계 이모티콘 제거
     app.client.reactions.remove({
@@ -120,42 +109,13 @@ const setup = (app: App) => {
       timestamp: message.ts,
     });
 
-    if (/\`\`\`/.test(response)) {
-      // 코드블럭이 포함된 경우
-      // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
-      // 코드 스니펫으로 만들어서 보내면 더 좋을 것 같은데... BlockKit처럼 여러번 반복 등장할 수 없다.
-      const blocks: Block[] | KnownBlock[] = response
-        .split(/\`\`\`/)
-        .map((v, i) => {
-          if (i % 2 === 0) {
-            return Section({ text: Markdown(v) });
-          } else {
-            const langaugeMatch = /^(#?\S+)/.exec(v);
-            if (langaugeMatch) {
-              langaugeMatch[1];
-              v = v.replace(/^(#?\S+)/, "");
-            }
-            return Section({
-              text: Markdown("```" + v + "```"),
-            });
-          }
-        });
+    const blocks = formatResponse(response);
 
-      await say({
-        text: response,
-        thread_ts: message.thread_ts,
-        blocks: [...blocks, ...sessionManageToolbar],
-      });
-    } else {
-      await say({
-        text: response,
-        blocks: [
-          Section({ text: Markdown(response) }),
-          ...sessionManageToolbar,
-        ],
-        thread_ts: message.thread_ts,
-      });
-    }
+    await say({
+      text: response,
+      blocks,
+      thread_ts: message.thread_ts,
+    });
   });
 
   // TODO: 채팅을 초기화하는 액션
@@ -178,11 +138,22 @@ const setup = (app: App) => {
         ts: event.thread_ts,
         limit: 1,
       });
-      for (const message of thread.messages ?? []) {
-        console.log(message);
+      if (thread.messages?.length ?? 0 > 0) {
+        SessionManager.clearSession(event.user!); // 컨텍스트 전환을 위해 세션을 초기화함
+        const session = SessionManager.getSession(event.user!);
+
+        // TODO: 이전 대화를 읽고 있음을 리액션??
+
+        // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
+        const response = await chatCompletion(
+          thread.messages![0].text!,
+          session
+        );
+        const blocks = formatResponse(response);
         await say({
-          text: message.text,
-          thread_ts: message.thread_ts,
+          text: response,
+          blocks,
+          thread_ts: thread.messages![0].thread_ts,
         });
       }
     } else {
@@ -194,12 +165,9 @@ const setup = (app: App) => {
         inclusive: false,
       });
       history.messages;
+      console.log("-----");
       for (const message of history.messages ?? []) {
         console.log(message);
-        await say({
-          text: message.text,
-          thread_ts: message.thread_ts,
-        });
       }
     }
   });

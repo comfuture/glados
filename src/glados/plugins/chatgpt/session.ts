@@ -16,9 +16,15 @@ export class ChatSession {
   private ttl: number = 120 * 1000;
   private lastAccessTime: number = Date.now();
   private history: [number, ChatCompletionRequestMessage][];
+  private _user?: string;
 
-  constructor() {
+  constructor(user: string) {
     this.history = [];
+    this._user = user;
+  }
+
+  public get user(): string | undefined {
+    return this._user;
   }
 
   /** 히스토리를 가져온다 */
@@ -70,7 +76,7 @@ export class SessionManager {
 
   public static getSession(user: string): ChatSession {
     if (!this.sessions.has(user)) {
-      const newSession = new ChatSession();
+      const newSession = new ChatSession(user);
       SessionManager.sessions.set(user, newSession);
       return newSession;
     }
