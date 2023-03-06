@@ -138,7 +138,10 @@ const setup = (app: App) => {
         blocks: [...blocks, ...sessionManageToolbar],
       });
     } else {
-      await say(response);
+      await say({
+        text: response,
+        thread_ts: message.thread_ts,
+      });
     }
   });
 
