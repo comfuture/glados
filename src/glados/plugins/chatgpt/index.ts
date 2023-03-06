@@ -150,9 +150,14 @@ const setup = (app: App) => {
   });
 
   // TODO: 채팅을 초기화하는 액션
-  app.action("chatgpt:clearSession", async ({ ack, say, body, client }) => {
+  app.action("chatgpt:clearSession", async ({ ack, say, body, context }) => {
     await ack();
-    say(`<@${body.user.id}> 더이상 대화가 없어 채팅을 종료합니다`);
+    const sayGoodbye = body.channel
+      ? `<@${body.user.id}> 대화를 종료합니다.`
+      : "대화를 종료합니다.";
+    say({
+      text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
+    });
     SessionManager.clearSession(body.user.id);
   });
 
