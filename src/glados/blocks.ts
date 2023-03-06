@@ -7,6 +7,7 @@ import {
   PlainTextElement,
   SectionBlock,
   ContextBlock,
+  ActionsBlock,
 } from "@slack/types";
 
 export const Text = (text: string): PlainTextElement => ({
@@ -60,6 +61,11 @@ export const Section = ({ ...props }): SectionBlock => ({
 
 export const Context = (elements: any[]): ContextBlock => ({
   type: "context",
+  elements,
+});
+
+export const Actions = (elements: any[]): ActionsBlock => ({
+  type: "actions",
   elements,
 });
 

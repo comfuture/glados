@@ -81,4 +81,8 @@ export class SessionManager {
     }
     return session;
   }
+
+  public static clearSession(user: string) {
+    this.sessions.delete(user);
+  }
 }

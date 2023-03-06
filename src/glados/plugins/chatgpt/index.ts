@@ -1,11 +1,16 @@
-import { App, GenericMessageEvent, FileShareMessageEvent } from "@slack/bolt";
+import {
+  App,
+  GenericMessageEvent,
+  FileShareMessageEvent,
+  SayArguments,
+} from "@slack/bolt";
 import { Block, KnownBlock } from "@slack/types";
 import { definePlugin } from "../..";
 
 import type { ChatCompletionRequestMessage } from "openai";
 import openai from "../../utils/openai";
 
-import { Markdown, Section, Text } from "../../blocks";
+import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
 
 // 캐릭터 셋업
@@ -30,6 +35,17 @@ function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
     message.files[0]?.media_display_type === "audio"
   );
 }
+
+// 채팅 초기화 블록
+const sessionManageToolbar: KnownBlock[] = [
+  Actions([
+    Button("대화세션 종료", {
+      id: "chatgpt:clearSession",
+      value: "chatgpt:clearSession",
+      style: "danger",
+    }),
+  ]),
+];
 
 const setup = (app: App) => {
   app.message(async ({ message, say, context }) => {
@@ -118,7 +134,8 @@ const setup = (app: App) => {
 
       await say({
         text: response,
-        blocks,
+        thread_ts: message.thread_ts,
+        blocks: [...blocks, ...sessionManageToolbar],
       });
     } else {
       await say(response);
@@ -126,9 +143,10 @@ const setup = (app: App) => {
   });
 
   // TODO: 채팅을 초기화하는 액션
-  app.action("chatgpt:restartSession", async ({ ack, say, body }) => {
+  app.action("chatgpt:clearSession", async ({ ack, say, body, client }) => {
     await ack();
-    say(`<@${body.user.id}> 채팅을 초기화합니다.`);
+    say(`<@${body.user.id}> 더이상 대화가 없어 채팅을 종료합니다`);
+    SessionManager.clearSession(body.user.id);
   });
 
   app.event("app_mention", async ({ event, say, client }) => {
@@ -141,7 +159,7 @@ const setup = (app: App) => {
       // });
       // thread.messages;
     } else {
-      // TODO: 유저의 최근 대화를 가져와 응답
+      // TODO: 유저의 최근 대화를 n개 가져와 응답
       // const history = await client.conversations.history({
       //   channel: event.channel,
       //   user: event.user,
