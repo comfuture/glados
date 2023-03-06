@@ -1,14 +1,14 @@
-import { App, GenericMessageEvent } from "@slack/bolt";
+import { App, GenericMessageEvent, FileShareMessageEvent } from "@slack/bolt";
 import { Block, KnownBlock } from "@slack/types";
-import { ClientRequest } from "http";
+import { definePlugin } from "../..";
 
 import type {
   ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum,
 } from "openai";
-import openai from "../assistant";
+import openai from "../../utils/openai";
 
-import { Markdown, Section, Text } from "../blocks";
+import { Markdown, Section, Text } from "../../blocks";
 
 // 캐릭터 셋업
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
@@ -36,11 +36,30 @@ const clearHistory = (owner: string) => {
   HISTORY[owner] = [];
 };
 
+/** test if message is a direct message or a channel message */
+function isGenericMessageEvent(message: any): message is GenericMessageEvent {
+  const isDirectMessage =
+    message.channel_type === "im" || message.channel_type === "mpim";
+  const isChannelMessage = message.channel_type === "channel";
+  return isDirectMessage || isChannelMessage;
+}
+
+/** test if message has audio files */
+function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
+  return (
+    message.subtype === "file_share" &&
+    message.files.length > 0 &&
+    message.files[0]?.media_display_type === "audio"
+  );
+}
+
 const setup = (app: App) => {
   console.info("Chat module loaded");
-  app.message(async ({ message: _message, say, context }) => {
-    const message: GenericMessageEvent = _message as GenericMessageEvent;
-    // 봇에게 직접 메시지를 보낸 경우
+  app.message(async ({ message, say, context }) => {
+    if (!isGenericMessageEvent(message)) {
+      return;
+    }
+    // debug print
     console.info("Message received: ", message);
 
     // DM 또는 멀티채널에서 봇을 언급한 경우
@@ -55,12 +74,14 @@ const setup = (app: App) => {
       return;
     }
 
-    const content: string | undefined = message.text
-      ?.replace(`<@${context.botUserId}>`, "")
-      .trim();
+    let content: string =
+      message.text?.replace(`<@${context.botUserId}>`, "").trim() ?? "";
 
     // 내용이 없는 경우 무시
     if (!content) {
+      // 오디오 첨부파일이 있는 경우
+      if (isAudioMessageEvent(message)) {
+      }
       return;
     }
 
@@ -83,7 +104,6 @@ const setup = (app: App) => {
       timestamp: message.ts,
     });
 
-    saveHistory(message.user, content);
     const result = await openai.createChatCompletion({
       model: "gpt-3.5-turbo",
       messages: [BOT_CHARACTER, { role: "user", content }],
@@ -91,6 +111,7 @@ const setup = (app: App) => {
       temperature: 0.6,
       frequency_penalty: 0.4,
     });
+    saveHistory(message.user, content);
 
     const response = result.data.choices[0].message?.content!.trim()!;
     saveHistory(message.user, response, "assistant");
@@ -117,6 +138,6 @@ const setup = (app: App) => {
   });
 };
 
-export default {
+export default definePlugin({
   setup,
-};
+});

@@ -1,6 +1,7 @@
-import { Section, Image, Text, Context, Button, Modal } from "../blocks";
-import openai from "../assistant";
+import { Section, Image, Text, Context, Button, Modal } from "../../blocks";
+import openai from "../../utils/openai";
 import { App } from "@slack/bolt";
+import { definePlugin } from "../..";
 
 const setup = (app: App) => {
   console.info("Image module loaded");
@@ -37,6 +38,6 @@ const setup = (app: App) => {
   });
 };
 
-export default {
+export default definePlugin({
   setup,
-};
+});
