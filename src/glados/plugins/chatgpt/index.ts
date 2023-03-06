@@ -2,38 +2,16 @@ import { App, GenericMessageEvent, FileShareMessageEvent } from "@slack/bolt";
 import { Block, KnownBlock } from "@slack/types";
 import { definePlugin } from "../..";
 
-import type {
-  ChatCompletionRequestMessage,
-  ChatCompletionRequestMessageRoleEnum,
-} from "openai";
+import type { ChatCompletionRequestMessage } from "openai";
 import openai from "../../utils/openai";
 
 import { Markdown, Section, Text } from "../../blocks";
+import { SessionManager } from "./session";
 
 // 캐릭터 셋업
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
   role: "system",
-  content:
-    "The assistant is a chatbot that can talk to humans. Try to be nice.",
-};
-
-const HISTORY: { [x: string]: ChatCompletionRequestMessage[] } = {};
-
-/** 발화/응답 히스토리를 유저별로 저장 */
-const saveHistory = (
-  owner: string,
-  content: string,
-  role: ChatCompletionRequestMessageRoleEnum = "user"
-) => {
-  if (HISTORY[owner] === undefined) {
-    HISTORY[owner] = [];
-  }
-  HISTORY[owner].push({ role, content });
-};
-
-/** 특정 사용자의 히스토리를 제거 */
-const clearHistory = (owner: string) => {
-  HISTORY[owner] = [];
+  content: "Use Korean as possible. Try to be nice.",
 };
 
 /** test if message is a direct message or a channel message */
@@ -54,7 +32,6 @@ function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
 }
 
 const setup = (app: App) => {
-  console.info("Chat module loaded");
   app.message(async ({ message, say, context }) => {
     if (!isGenericMessageEvent(message)) {
       return;
@@ -81,6 +58,7 @@ const setup = (app: App) => {
     if (!content) {
       // 오디오 첨부파일이 있는 경우
       if (isAudioMessageEvent(message)) {
+        // TODO: whisper로 stt 한다음 content에 넣는다.
       }
       return;
     }
@@ -104,27 +82,37 @@ const setup = (app: App) => {
       timestamp: message.ts,
     });
 
+    const session = SessionManager.getSession(message.user);
+    session.addHistory(content);
+
     const result = await openai.createChatCompletion({
       model: "gpt-3.5-turbo",
-      messages: [BOT_CHARACTER, { role: "user", content }],
+      messages: [BOT_CHARACTER, ...session.getHistory()],
       max_tokens: 1024,
       temperature: 0.6,
       frequency_penalty: 0.4,
     });
-    saveHistory(message.user, content);
 
     const response = result.data.choices[0].message?.content!.trim()!;
-    saveHistory(message.user, response, "assistant");
+    session.addHistory(response, "assistant");
     if (/\`\`\`/.test(response)) {
       // 코드블럭이 포함된 경우
       // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
+      // 코드 스니펫으로 만들어서 보내면 더 좋을 것 같은데... BlockKit처럼 여러번 반복 등장할 수 없다.
       const blocks: Block[] | KnownBlock[] = response
         .split(/\`\`\`/)
         .map((v, i) => {
           if (i % 2 === 0) {
             return Section({ text: Markdown(v) });
           } else {
-            return Section({ text: Markdown("```" + v + "```") });
+            const langaugeMatch = /^\s*(\S+)/.exec(v);
+            if (langaugeMatch) {
+              langaugeMatch[1];
+              v = v.replace(new RegExp("^(\\s*)" + langaugeMatch[1]), "$1");
+            }
+            return Section({
+              text: Markdown("```" + v + "```"),
+            });
           }
         });
 
@@ -136,8 +124,36 @@ const setup = (app: App) => {
       await say(response);
     }
   });
+
+  // TODO: 채팅을 초기화하는 액션
+  app.action("chatgpt:restartSession", async ({ ack, say, body }) => {
+    await ack();
+    say(`<@${body.user.id}> 채팅을 초기화합니다.`);
+  });
+
+  app.event("app_mention", async ({ event, say, client }) => {
+    if (event.thread_ts) {
+      // TODO: 스레드에서 언급한 경우, 스레드의 첫 메시지를 가져와 응답
+      // const thread = await client.conversations.replies({
+      //   channel: event.channel,
+      //   ts: event.thread_ts,
+      //   limit: 1,
+      // });
+      // thread.messages;
+    } else {
+      // TODO: 유저의 최근 대화를 가져와 응답
+      // const history = await client.conversations.history({
+      //   channel: event.channel,
+      //   user: event.user,
+      //   latest: event.ts,
+      //   inclusive: false,
+      // });
+      // history.messages;
+    }
+  });
 };
 
 export default definePlugin({
+  name: "ChatGPT",
   setup,
 });

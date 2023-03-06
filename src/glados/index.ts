@@ -5,6 +5,7 @@ export class Bot extends App {
   /** plugin을 등록합니다. */
   public registerPlugin(plugin: GladosPlugin) {
     plugin.setup(this);
+    console.info(`[GLaDOS] ${plugin.name} plugin is loaded.`);
   }
 }
 

@@ -4,7 +4,6 @@ import { App } from "@slack/bolt";
 import { definePlugin } from "../..";
 
 const setup = (app: App) => {
-  console.info("Image module loaded");
   app.command("/imagine", async ({ command, ack, say, client }) => {
     await ack();
     // if (!command.text) {
@@ -39,5 +38,6 @@ const setup = (app: App) => {
 };
 
 export default definePlugin({
+  name: "DALL E",
   setup,
 });
