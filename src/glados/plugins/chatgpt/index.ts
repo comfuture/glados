@@ -93,7 +93,7 @@ const setup = (app: App) => {
 
     // 메시지에 모래시계 이모티콘 붙이기
     app.client.reactions.add({
-      name: "hourclass",
+      name: "hourglass",
       channel: message.channel,
       timestamp: message.ts,
     });
@@ -114,7 +114,7 @@ const setup = (app: App) => {
 
     // 메시지에서 모래시계 이모티콘 제거
     app.client.reactions.remove({
-      name: "hourclass",
+      name: "hourglass",
       channel: message.channel,
       timestamp: message.ts,
     });
