@@ -140,6 +140,10 @@ const setup = (app: App) => {
     } else {
       await say({
         text: response,
+        blocks: [
+          Section({ text: Markdown(response) }),
+          ...sessionManageToolbar,
+        ],
         thread_ts: message.thread_ts,
       });
     }
