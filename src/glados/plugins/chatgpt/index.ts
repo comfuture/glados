@@ -148,13 +148,24 @@ const setup = (app: App) => {
         SessionManager.clearSession(event.user!); // 컨텍스트 전환을 위해 세션을 초기화함
         const session = SessionManager.getSession(event.user!);
 
-        // TODO: 이전 대화를 읽고 있음을 리액션??
+        app.client.reactions.add({
+          name: "ok_hand",
+          channel: event.channel,
+          timestamp: event.ts,
+        });
 
         // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
         const response = await chatCompletion(
           thread.messages![0].text!,
           session
         );
+
+        app.client.reactions.remove({
+          name: "ok_hand",
+          channel: event.channel,
+          timestamp: event.ts,
+        });
+
         const blocks = formatResponse(response);
         await say({
           text: response,
