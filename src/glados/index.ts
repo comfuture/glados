@@ -13,8 +13,8 @@ const corePlugin = definePlugin({
   setup(app) {
     app.command("/glados", async ({ command: _command, ack, say, client }) => {
       await ack();
-      const [command, text] = _command.text.split(" ", 2);
-      const args = shellQuote.parse(text ?? "");
+      const [command, ...remain] = _command.text.split(" ");
+      const args = shellQuote.parse(remain.join(" ") ?? "");
       await say(`you called ${command} with ${JSON.stringify(args)}`);
     });
   },
