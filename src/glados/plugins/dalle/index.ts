@@ -21,17 +21,13 @@ const setup = (app: App) => {
 
     const loading = await say(`그리는 중...`);
     const buff = await drawImage(command.text);
-
     await client.chat.delete({ ts: loading.ts!, channel: command.channel_id });
-
-    const uploadResult = client.files.upload({
+    await client.filesUploadV2({
       channels: command.channel_id,
       thread_ts: command.thread_ts,
       file: buff,
       alt_text: command.text,
-    });
-    await say({
-      blocks: [Section({ text: Text(command.text) })],
+      filename: command.text,
     });
   });
 };
