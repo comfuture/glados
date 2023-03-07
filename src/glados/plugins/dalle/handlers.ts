@@ -16,7 +16,7 @@ export async function drawImage(
     response_format: "b64_json",
   });
 
-  if (response.data.data.length === 0) {
+  if (response.data.data.length !== 0) {
     return Buffer.from(response.data.data[0].b64_json!, "base64");
   }
   throw new Error("Image generation failed");
