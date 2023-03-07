@@ -2,8 +2,11 @@ import { Section, Image, Text, Context, Button, Modal } from "../../blocks";
 import openai from "../../utils/openai";
 import { App } from "@slack/bolt";
 import { definePlugin } from "../..";
+import { drawImage } from "./handlers";
 
 const setup = (app: App) => {
+  app.message("그려줘", async ({ message, say, context }) => {});
+
   app.command("/imagine", async ({ command, ack, say, client }) => {
     await ack();
     // if (!command.text) {
@@ -17,22 +20,18 @@ const setup = (app: App) => {
     // }
 
     const loading = await say(`그리는 중...`);
-    const response = await openai.createImage({
-      prompt: command.text,
-      n: 1,
-      size: "1024x1024",
-    });
-    const imageUrls = response.data.data as { url: string }[];
+    const buff = await drawImage(command.text);
+
     await client.chat.delete({ ts: loading.ts!, channel: command.channel_id });
-    await client.files.uploadV2({
+
+    const uploadResult = client.files.upload({
       channels: command.channel_id,
-      file: imageUrls[0].url,
+      thread_ts: command.thread_ts,
+      file: buff,
       alt_text: command.text,
     });
     await say({
-      blocks: [
-        Image(imageUrls[0].url, command.text, { title: Text(command.text) }),
-      ],
+      blocks: [Section({ text: Text(command.text) })],
     });
   });
 };

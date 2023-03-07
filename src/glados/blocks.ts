@@ -34,13 +34,14 @@ export const Button = (
     value: string;
     style?: "primary" | "danger" | undefined;
     url?: string;
-  }
+  } = { id: "button", value: "" }
 ): ButtonType => ({
   type: "button",
   text: Text(text),
   value,
   action_id: id,
   style,
+  url,
 });
 
 export const Image = (
