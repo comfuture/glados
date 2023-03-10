@@ -7,4 +7,4 @@ RUN npm ci
 RUN npm run build
 
 # start command
-CMD [ "npm", "serve" ]
+CMD [ "npm", "run", "serve" ]
