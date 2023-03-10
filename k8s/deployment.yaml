@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: ipny-bot
-        image: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com/$APP:$TAG
+        image: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com/ipny-bot:$TAG
         resources:
           limits:
             memory: "300Mi"
