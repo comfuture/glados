@@ -14,8 +14,11 @@ spec:
     spec:
       containers:
       - name: ipny-bot
-        image: $REPOSITORY_URL/$APP:$TAG
+        image: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com/$APP:$TAG
         resources:
           limits:
             memory: "300Mi"
             cpu: "500m"
+        envFrom:
+        - secretRef:
+            name: ipny-bot
