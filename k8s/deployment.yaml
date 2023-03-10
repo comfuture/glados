@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: ipny-bot
-        image: $REPOSITORY/$APP:$TAG
+        image: $REPOSITORY_URL/$APP:$TAG
         resources:
           limits:
             memory: "300Mi"
