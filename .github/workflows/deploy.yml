@@ -1,33 +1,46 @@
+name: Deploy
+
 on:
-  push:
-    branches:
-    - main
+  release:
+    types:
+    - published
+
 jobs:
-  deploy:
+  release-iplateia:
     runs-on: ubuntu-latest
     env:
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
-      SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      APP: ipny-bot
+      REPOSITORY_URL: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com
+      KUBECONFIG: /tmp/kubeconfig
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+
     steps:
-    - uses: actions/checkout@v3
-    - uses: webfactory/ssh-agent@v0.7.0
+    - name: checkout
+      uses: actions/checkout@v3
       with:
-        ssh-private-key: ${{ secrets.SSH_KEY }}
-    - name: make env file
+        ref: ${{ github.ref }}
+    - name: ensure ecr repository
       run: |
-        echo SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN >> .env
-        echo SLACK_APP_TOKEN=$SLACK_APP_TOKEN >> .env
-        echo SLACK_SIGNING_SECRET=$SLACK_SIGNING_SECRET >> .env
-        echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
-    - name: send files to server
+        # aws ecr create-repository --repository-name $APP > /dev/null 2>&1
+        bash -c 'aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $REPOSITORY_URL'
+    - name: build and push
       run: |
-        sh -c "rsync -avzO --delete --exclude=__pycache__ --exclude=node_modules \
-           -e 'ssh -o StrictHostKeyChecking=no' . ubuntu@glados.changkyun.kim:service/glados"
-    - name: install dependencies
+        export TAG=$(echo ${{ github.ref }} | cut -d '/' -f 3 )
+        docker build -t $REPOSITORY_URL/$APP:$TAG -f Dockerfile .
+        docker push $REPOSITORY_URL/$APP:$TAG
+    - name: replacement
       run: |
-        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c ". ~/.nvm/nvm.sh && cd service/glados && yarn"'
-    - name: restart service
+        sed -i 's@$SLACK_BOT_TOKEN@${{ secrets.SLACK_BOT_TOKEN }}@g' k8s/secret.yaml
+        sed -i 's@$SLACK_SIGNING_SECRET@${{ secrets.SLACK_SIGNING_SECRET }}@g' k8s/secret.yaml
+        sed -i 's@$SLACK_APP_TOKEN@${{ secrets.SLACK_APP_TOKEN }}@g' k8s/secret.yaml
+        sed -i 's@$OPENAI_API_KEY@${{ secrets.OPENAI_API_KEY }}@g' k8s/secret.yaml
+        sed -i 's@$REPOSITORY_URL@'$REPOSITORY_URL'@g' k8s/deployment.yaml
+        sed -i 's@$APP@'$APP'@g' k8s/deployment.yaml
+        sed -i 's@$TAG@'$TAG'@g' k8s/deployment.yaml
+    - name: kubectl apply k8s
       run: |
-        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c "sudo systemctl restart glados.service"'
+        echo $KUBE_CONFIG_DATA | base64 -d > $KUBECONFIG
+        aws eks --region ap-northeast-2 update-kubeconfig --name iplateia
+        kubectl apply -f k8s

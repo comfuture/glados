@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipny-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipny-bot
+  template:
+    metadata:
+      labels:
+        app: ipny-bot
+    spec:
+      containers:
+      - name: ipny-bot
+        image: $REPOSITORY/$APP:$TAG
+        resources:
+          limits:
+            memory: "300Mi"
+            cpu: "500m"

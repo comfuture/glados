@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipny-bot
+data:
+  SLACK_BOT_TOKEN: $SLACK_BOT_TOKEN
+  SLACK_SIGNING_SECRET: $SLACK_SIGNING_SECRET
+  SLACK_APP_TOKEN: $SLACK_APP_TOKEN
+  OPENAI_API_KEY: secrets.OPENAI_API_KEY
