@@ -1,4 +1,5 @@
 import { App } from "@slack/bolt";
+import sanitizeFilename from "sanitize-filename";
 import { definePlugin } from "../..";
 import { Context, Text } from "../../blocks";
 import { drawImage, ImagePromptDialog } from "./handlers";
@@ -33,7 +34,7 @@ const setup = (app: App) => {
       thread_ts: command.thread_ts,
       file: buff,
       alt_text: command.text,
-      filename: command.text,
+      filename: sanitizeFilename(`${command.text.substring(0, 50)}.png`),
     });
 
     app.client.reactions.remove({
