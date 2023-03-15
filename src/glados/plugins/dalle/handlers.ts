@@ -54,6 +54,7 @@ export async function makePrompt(
 
 export function ImagePromptDialog(): ModalView {
   return Modal({
+    id: "imagine-modal",
     title: "그림 그리기",
     blocks: [
       TextInput({

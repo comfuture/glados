@@ -74,13 +74,16 @@ export const Actions = (elements: any[]): ActionsBlock => ({
 export const Modal = ({
   title,
   blocks,
+  id,
   okLabel,
 }: {
   title: string;
   blocks: any[];
+  id?: string;
   okLabel?: string;
 }): ModalView => ({
   type: "modal",
+  callback_id: id,
   title: Text(title),
   blocks,
   submit: okLabel ? Text(okLabel) : undefined,
