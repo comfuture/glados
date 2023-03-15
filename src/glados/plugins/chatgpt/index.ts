@@ -135,11 +135,17 @@ const setup = (app: App) => {
         ? `<@${body.user.id}> 대화를 종료합니다.`
         : "대화를 종료합니다.";
 
-      client.chat.postEphemeral({
-        text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
-        channel: body.channel?.id!,
-        user: body.user.id,
-      });
+      if (body.type === "block_actions") {
+        await client.chat.delete({
+          ts: body.message?.ts!,
+          channel: body.channel?.id!,
+        });
+        await client.chat.postEphemeral({
+          text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
+          channel: body.channel?.id!,
+          user: body.user.id,
+        });
+      }
       SessionManager.clearSession(body.user.id);
     }
   );
