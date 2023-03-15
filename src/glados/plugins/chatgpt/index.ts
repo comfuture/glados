@@ -155,10 +155,12 @@ const setup = (app: App) => {
         });
 
         // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
-        const response = await chatCompletion(
-          thread.messages![0].text!,
-          session
-        );
+        // 언급에 추가 메시지가 있는 경우에는 그 메시지도 사용자 발화로 간주
+        let prompt = thread.messages![0].text!;
+        if (event.text.length > 0) {
+          prompt += `\n${event.text}`;
+        }
+        const response = await chatCompletion(prompt, session);
 
         app.client.reactions.remove({
           name: "ok_hand",
