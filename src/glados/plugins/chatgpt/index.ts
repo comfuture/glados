@@ -14,12 +14,6 @@ import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
 import { chatCompletion, formatResponse } from "./handlers";
 
-// 캐릭터 셋업
-const BOT_CHARACTER: ChatCompletionRequestMessage = {
-  role: "system",
-  content: "Use Korean as possible. Try to be nice.",
-};
-
 /** test if message is a direct message or a channel message */
 function isGenericMessageEvent(message: any): message is GenericMessageEvent {
   const isDirectMessage =
@@ -39,13 +33,13 @@ function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
 
 // 채팅 초기화 블록
 const sessionManageToolbar: KnownBlock[] = [
-  Actions([
-    Button("대화세션 종료", {
+  Section({
+    text: Markdown("대화를 종료하려면 눌러주세요"),
+    accessory: Button("대화세션 종료", {
       id: "chatgpt:clearSession",
       value: "chatgpt:clearSession",
-      style: "danger",
     }),
-  ]),
+  }),
 ];
 
 const setup = (app: App) => {
@@ -122,6 +116,11 @@ const setup = (app: App) => {
       blocks,
       thread_ts: message.thread_ts,
     });
+    const ret = await say({
+      blocks: sessionManageToolbar,
+      thread_ts: message.thread_ts,
+    });
+    session.setActionsBlockTs(ret.ts!);
   });
 
   // TODO: 채팅을 초기화하는 액션

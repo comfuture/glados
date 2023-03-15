@@ -15,6 +15,7 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 export class ChatSession {
   private ttl: number = 120 * 1000;
   private lastAccessTime: number = Date.now();
+  private actionsBlockTs?: string;
   private history: [number, ChatCompletionRequestMessage][];
   private _user?: string;
 
@@ -62,6 +63,10 @@ export class ChatSession {
 
   public clearHistory() {
     this.history = [];
+  }
+
+  public setActionsBlockTs(ts: string) {
+    this.actionsBlockTs = ts;
   }
 
   /** 대화가 {ttl}이상 정체되어 있으면 종료되었다고 가정합니다 */
