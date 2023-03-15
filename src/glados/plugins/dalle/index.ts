@@ -17,11 +17,12 @@ const setup = (app: App) => {
     }
 
     const loading = await say({
+      channel: command.channel_id,
       text: `/imagine ${command.text}`,
       as_user: true,
     });
 
-    const loadingIcon = await app.client.reactions.add({
+    await app.client.reactions.add({
       name: "hourglass",
       channel: command.channel,
       timestamp: loading.ts,
