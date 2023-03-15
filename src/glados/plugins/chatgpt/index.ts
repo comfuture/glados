@@ -13,6 +13,7 @@ import openai from "../../utils/openai";
 import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
 import { chatCompletion, formatResponse } from "./handlers";
+import { ClientRequest } from "http";
 
 /** test if message is a direct message or a channel message */
 function isGenericMessageEvent(message: any): message is GenericMessageEvent {
@@ -43,7 +44,7 @@ const sessionManageToolbar: KnownBlock[] = [
 ];
 
 const setup = (app: App) => {
-  app.message(async ({ message, say, context }) => {
+  app.message(async ({ message, say, client, context }) => {
     if (!isGenericMessageEvent(message)) {
       return;
     }
@@ -116,24 +117,32 @@ const setup = (app: App) => {
       blocks,
       thread_ts: message.thread_ts,
     });
-    const ret = await say({
+    const ret = await client.chat.postEphemeral({
       blocks: sessionManageToolbar,
       thread_ts: message.thread_ts,
+      user: message.user,
+      channel: message.channel,
     });
-    session.setActionsBlockTs(ret.ts!);
+    session.setActionsBlockTs(ret.message_ts!);
   });
 
   // TODO: 채팅을 초기화하는 액션
-  app.action("chatgpt:clearSession", async ({ ack, say, body, context }) => {
-    await ack();
-    const sayGoodbye = body.channel
-      ? `<@${body.user.id}> 대화를 종료합니다.`
-      : "대화를 종료합니다.";
-    say({
-      text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
-    });
-    SessionManager.clearSession(body.user.id);
-  });
+  app.action(
+    "chatgpt:clearSession",
+    async ({ ack, say, body, client, context }) => {
+      await ack();
+      const sayGoodbye = body.channel
+        ? `<@${body.user.id}> 대화를 종료합니다.`
+        : "대화를 종료합니다.";
+
+      client.chat.postEphemeral({
+        text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
+        channel: body.channel?.id!,
+        user: body.user.id,
+      });
+      SessionManager.clearSession(body.user.id);
+    }
+  );
 
   app.event("app_mention", async ({ event, say, client }) => {
     if (event.thread_ts) {

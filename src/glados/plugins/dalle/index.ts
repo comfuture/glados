@@ -11,7 +11,7 @@ function isDialogSubmitAction(action: any): action is DialogSubmitAction {
 const setup = (app: App) => {
   app.message("그려줘", async ({ message, say, context }) => {});
 
-  app.view("image-prompt", async ({ ack, body, view, client, context }) => {
+  app.view("imagine-modal", async ({ ack, body, view, client, context }) => {
     await ack();
     console.log(body, view, client, context);
   });
