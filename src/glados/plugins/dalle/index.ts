@@ -11,12 +11,9 @@ function isDialogSubmitAction(action: any): action is DialogSubmitAction {
 const setup = (app: App) => {
   app.message("그려줘", async ({ message, say, context }) => {});
 
-  app.action("image-prompt", async ({ ack, body, action, client, context }) => {
+  app.view("image-prompt", async ({ ack, body, view, client, context }) => {
     await ack();
-    console.log(body, action, client, context);
-    // if (isDialogSubmitAction(action)) {
-    //   await SyntaxError(action.value);
-    // }
+    console.log(body, view, client, context);
   });
 
   app.command("/imagine", async ({ command, ack, say, client }) => {
