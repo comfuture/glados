@@ -1,8 +1,10 @@
+import { ModalView } from "@slack/types";
 import {
   ChatCompletionRequestMessage,
   CreateImageRequestSizeEnum,
 } from "openai";
 import openai from "../../utils/openai";
+import { Modal, Section, TextInput } from "../../blocks";
 
 /** 주어진 프롬프트에 대한 이미지를 그려줍니다. */
 export async function drawImage(
@@ -33,8 +35,10 @@ export async function makePrompt(
       content:
         "You are a good painter. Provide imagination to describe the given prompt in detail.",
     },
-    { role: "user", content: description },
   ];
+
+  const messageContent = `Describe an image of the following description:\nDescription: ${description}\nWrite in English`;
+  messages.push({ role: "user", content: messageContent });
 
   const response = await openai.createChatCompletion({
     model: "gpt-3.5-turbo",
@@ -46,4 +50,17 @@ export async function makePrompt(
   });
 
   return response.data.choices[0].message?.content!.trim()!;
+}
+
+export function ImagePromptDialog(): ModalView {
+  return Modal({
+    title: "그림 그리기",
+    blocks: [
+      TextInput({
+        id: "image-prompt",
+        label: "그림에 대한 설명",
+      }),
+    ],
+    okLabel: "그리기",
+  });
 }

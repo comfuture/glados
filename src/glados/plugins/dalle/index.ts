@@ -1,33 +1,51 @@
-import { Section, Image, Text, Context, Button, Modal } from "../../blocks";
-import openai from "../../utils/openai";
 import { App } from "@slack/bolt";
 import { definePlugin } from "../..";
-import { drawImage } from "./handlers";
+import { Context, Text } from "../../blocks";
+import { drawImage, ImagePromptDialog } from "./handlers";
 
 const setup = (app: App) => {
   app.message("그려줘", async ({ message, say, context }) => {});
 
   app.command("/imagine", async ({ command, ack, say, client }) => {
     await ack();
-    // if (!command.text) {
-    //   client.views.open({
-    //     trigger_id: body.trigger_id,
-    //     view: Modal({
-    //       title: "그림 그리기",
-    //       blocks: [Section({})],
-    //     }),
-    //   });
-    // }
+    if (!command.text) {
+      await client.views.open({
+        trigger_id: command.trigger_id,
+        view: ImagePromptDialog(),
+      });
+      return;
+    }
 
-    const loading = await say(`그리는 중...`);
+    const loading = await say({
+      text: `/imagine ${command.text}`,
+      as_user: true,
+    });
+
+    const loadingIcon = await app.client.reactions.add({
+      name: "hourglass",
+      channel: command.channel,
+      timestamp: loading.ts,
+    });
+
     const buff = await drawImage(command.text);
-    await client.chat.delete({ ts: loading.ts!, channel: command.channel_id });
     await client.filesUploadV2({
       channels: command.channel_id,
       thread_ts: command.thread_ts,
       file: buff,
       alt_text: command.text,
       filename: command.text,
+    });
+
+    app.client.reactions.remove({
+      name: "hourglass",
+      channel: command.channel,
+      timestamp: loading.ts,
+    });
+
+    await client.chat.postMessage({
+      channel: command.channel_id,
+      thread_ts: command.thread_ts,
+      blocks: [Context([Text(command.text)])],
     });
   });
 };
