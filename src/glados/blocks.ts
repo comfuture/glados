@@ -100,6 +100,7 @@ export const TextInput = ({
   multiline?: boolean;
 }): InputBlock => ({
   type: "input",
+  block_id: id,
   label: Text(label),
   element: {
     type: "plain_text_input",

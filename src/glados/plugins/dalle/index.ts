@@ -1,11 +1,23 @@
-import { App } from "@slack/bolt";
+import { App, DialogSubmitAction } from "@slack/bolt";
 import sanitizeFilename from "sanitize-filename";
 import { definePlugin } from "../..";
 import { Context, Text } from "../../blocks";
 import { drawImage, ImagePromptDialog } from "./handlers";
 
+function isDialogSubmitAction(action: any): action is DialogSubmitAction {
+  return action.type === "dialog_submission";
+}
+
 const setup = (app: App) => {
   app.message("그려줘", async ({ message, say, context }) => {});
+
+  app.action("image-prompt", async ({ ack, body, action, client, context }) => {
+    await ack();
+    console.log(body, action, client, context);
+    // if (isDialogSubmitAction(action)) {
+    //   await SyntaxError(action.value);
+    // }
+  });
 
   app.command("/imagine", async ({ command, ack, say, client }) => {
     await ack();
@@ -19,6 +31,8 @@ const setup = (app: App) => {
 
     const loading = await say({
       text: `/imagine ${command.text}`,
+      username: command.user_name,
+      icon_url: command.user_profile?.image_72,
       as_user: true,
     });
 
@@ -37,16 +51,16 @@ const setup = (app: App) => {
       filename: sanitizeFilename(`${command.text.substring(0, 50)}.png`),
     });
 
+    await say({
+      channel: command.channel_id,
+      thread_ts: command.thread_ts,
+      blocks: [Context([Text(command.text)])],
+    });
+
     app.client.reactions.remove({
       name: "hourglass",
       channel: command.channel_id,
       timestamp: loading.ts,
-    });
-
-    await client.chat.postMessage({
-      channel: command.channel_id,
-      thread_ts: command.thread_ts,
-      blocks: [Context([Text(command.text)])],
     });
   });
 };
