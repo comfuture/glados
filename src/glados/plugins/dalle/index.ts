@@ -17,14 +17,13 @@ const setup = (app: App) => {
     }
 
     const loading = await say({
-      channel: command.channel_id,
       text: `/imagine ${command.text}`,
       as_user: true,
     });
 
     await app.client.reactions.add({
       name: "hourglass",
-      channel: command.channel,
+      channel: command.channel_id,
       timestamp: loading.ts,
     });
 
@@ -39,7 +38,7 @@ const setup = (app: App) => {
 
     app.client.reactions.remove({
       name: "hourglass",
-      channel: command.channel,
+      channel: command.channel_id,
       timestamp: loading.ts,
     });
 
