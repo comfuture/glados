@@ -8,6 +8,7 @@ import {
   SectionBlock,
   ContextBlock,
   ActionsBlock,
+  InputBlock,
 } from "@slack/types";
 
 export const Text = (text: string): PlainTextElement => ({
@@ -73,11 +74,37 @@ export const Actions = (elements: any[]): ActionsBlock => ({
 export const Modal = ({
   title,
   blocks,
+  okLabel,
 }: {
   title: string;
   blocks: any[];
+  okLabel?: string;
 }): ModalView => ({
   type: "modal",
   title: Text(title),
   blocks,
+  submit: okLabel ? Text(okLabel) : undefined,
+});
+
+export const TextInput = ({
+  id,
+  label,
+  placeholder,
+  hint,
+  multiline,
+}: {
+  id: string;
+  label: string;
+  placeholder?: string;
+  hint?: string;
+  multiline?: boolean;
+}): InputBlock => ({
+  type: "input",
+  label: Text(label),
+  element: {
+    type: "plain_text_input",
+    placeholder: placeholder ? Text(placeholder) : undefined,
+    multiline,
+  },
+  hint: hint ? Text(hint) : undefined,
 });
