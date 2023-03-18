@@ -15,7 +15,7 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 export class ChatSession {
   private ttl: number = 120 * 1000;
   private lastAccessTime: number = Date.now();
-  private actionsBlockTs?: string;
+  private _actionsBlockTs?: string;
   private history: [number, ChatCompletionRequestMessage][];
   private _user?: string;
 
@@ -46,10 +46,11 @@ export class ChatSession {
 
     this.history.push([tokenSize, { role, content }]);
 
-    // 총 토큰수가 3072를 넘으면 히스토리를 앞에서부터 제거한다.
+    // 총 토큰수가 maxToken - 1000을 넘으면 히스토리를 앞에서부터 제거한다.
     // TODO: 제거하지 말고 요약해서 앞에 추가하면 더 좋음
+    const maxTokens = +(process.env.OPENAI_MAX_TOKEN ?? 4096);
     const totalTokenSize = this.history.reduce((acc, [len]) => acc + len, 0);
-    const tobeForgotten = totalTokenSize - 3072;
+    const tobeForgotten = totalTokenSize - maxTokens - 1000;
     if (tobeForgotten > 0) {
       let forgotten = 0;
       while (forgotten < tobeForgotten) {
@@ -66,7 +67,11 @@ export class ChatSession {
   }
 
   public setActionsBlockTs(ts: string) {
-    this.actionsBlockTs = ts;
+    this._actionsBlockTs = ts;
+  }
+
+  public get actionsBlockTs(): string | undefined {
+    return this._actionsBlockTs;
   }
 
   /** 대화가 {ttl}이상 정체되어 있으면 종료되었다고 가정합니다 */

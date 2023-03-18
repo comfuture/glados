@@ -112,16 +112,29 @@ const setup = (app: App) => {
 
     const blocks = formatResponse(response);
 
-    await say({
-      text: response,
-      blocks,
-      thread_ts: message.thread_ts,
-    });
+    try {
+      await say({
+        text: response,
+        blocks,
+        thread_ts: message.thread_ts,
+      });
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (session.actionsBlockTs) {
+      await client.chat.delete({
+        ts: session.actionsBlockTs,
+        channel: message.channel,
+      })
+    }
+
     const ret = await client.chat.postEphemeral({
       blocks: sessionManageToolbar,
       thread_ts: message.thread_ts,
       user: message.user,
       channel: message.channel,
+      post_at: Math.floor(Date.now() / 1000) + 30,
     });
     session.setActionsBlockTs(ret.message_ts!);
   });
@@ -136,10 +149,14 @@ const setup = (app: App) => {
         : "대화를 종료합니다.";
 
       if (body.type === "block_actions") {
-        await client.chat.delete({
-          ts: body.message?.ts!,
-          channel: body.channel?.id!,
-        });
+        const session = SessionManager.getSession(body.user.id);
+        if (session.actionsBlockTs) {
+          await client.chat.delete({
+            ts: session.actionsBlockTs,
+            channel: body.channel?.id!,
+          })
+        }
+    
         await client.chat.postEphemeral({
           text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
           channel: body.channel?.id!,
