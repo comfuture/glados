@@ -26,30 +26,33 @@ function isGenericMessageEvent(message: any): message is GenericMessageEvent {
 /** test if message has audio files */
 function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
   return (
+    // isGenericMessageEvent(message) &&
     message.subtype === "file_share" &&
-    message.files.length > 0 &&
+    message.files?.length > 0 &&
     message.files[0]?.media_display_type === "audio"
   );
 }
 
-// 채팅 초기화 블록
-const sessionManageToolbar: KnownBlock[] = [
-  Section({
-    text: Markdown("대화를 종료하려면 눌러주세요"),
-    accessory: Button("대화세션 종료", {
-      id: "chatgpt:clearSession",
-      value: "chatgpt:clearSession",
-    }),
-  }),
-];
-
 const setup = (app: App) => {
+  // XXX: experimental 채팅 초기화
+  app.command("/clearSession", async ({ command, ack, say, client, context }) => {
+    await ack();
+    if (SessionManager.hasSession(command.user.id, command.channel_id)) {
+      SessionManager.clearSession(command.user.id, command.channel_id);
+      await client.chat.postEphemeral({
+        channel: command.channel_id,
+        user: command.user_id,
+        text: `대화 세션이 종료되었습니다. 다시 시작하려면 <@${context.botUserId}>를 언급해주세요.`,
+      })
+    }
+  });
+
   app.message(async ({ message, say, client, context }) => {
     if (!isGenericMessageEvent(message)) {
       return;
     }
     // debug print
-    console.info("Message received: ", message);
+    console.info(`<@${message.user}> ${message.text}`);
 
     // DM 또는 멀티채널에서 봇을 언급한 경우
     const isDirectMessage =
@@ -63,7 +66,7 @@ const setup = (app: App) => {
       !(
         isDirectMessage ||
         isMentioned ||
-        SessionManager.hasSession(message.user)
+        SessionManager.hasActiveSession(message.user, message.channel)
       )
     ) {
       return;
@@ -77,6 +80,7 @@ const setup = (app: App) => {
       // 오디오 첨부파일이 있는 경우
       if (isAudioMessageEvent(message)) {
         // TODO: whisper로 stt 한다음 content에 넣는다.
+        // console.info("audio attached!", message.files?[0]);
       }
       return;
     }
@@ -100,7 +104,7 @@ const setup = (app: App) => {
       timestamp: message.ts,
     });
 
-    const session = SessionManager.getSession(message.user);
+    const session = SessionManager.getSession(message.channel_type, message.user);
     const response = await chatCompletion(content, session);
 
     // 메시지에서 모래시계 이모티콘 제거
@@ -118,54 +122,11 @@ const setup = (app: App) => {
         blocks,
         thread_ts: message.thread_ts,
       });
+      console.info(`<@${context.botUserId}> ${response}`);
     } catch (e) {
       console.error(e);
     }
-
-    if (session.actionsBlockTs) {
-      await client.chat.delete({
-        ts: session.actionsBlockTs,
-        channel: message.channel,
-      })
-    }
-
-    const ret = await client.chat.postEphemeral({
-      blocks: sessionManageToolbar,
-      thread_ts: message.thread_ts,
-      user: message.user,
-      channel: message.channel,
-      post_at: Math.floor(Date.now() / 1000) + 30,
-    });
-    session.setActionsBlockTs(ret.message_ts!);
   });
-
-  // TODO: 채팅을 초기화하는 액션
-  app.action(
-    "chatgpt:clearSession",
-    async ({ ack, say, body, client, context }) => {
-      await ack();
-      const sayGoodbye = body.channel
-        ? `<@${body.user.id}> 대화를 종료합니다.`
-        : "대화를 종료합니다.";
-
-      if (body.type === "block_actions") {
-        const session = SessionManager.getSession(body.user.id);
-        if (session.actionsBlockTs) {
-          await client.chat.delete({
-            ts: session.actionsBlockTs,
-            channel: body.channel?.id!,
-          })
-        }
-    
-        await client.chat.postEphemeral({
-          text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
-          channel: body.channel?.id!,
-          user: body.user.id,
-        });
-      }
-      SessionManager.clearSession(body.user.id);
-    }
-  );
 
   app.event("app_mention", async ({ event, say, client }) => {
     if (event.thread_ts) {
@@ -176,8 +137,7 @@ const setup = (app: App) => {
         limit: 1,
       });
       if (thread.messages?.length ?? 0 > 0) {
-        SessionManager.clearSession(event.user!); // 컨텍스트 전환을 위해 세션을 초기화함
-        const session = SessionManager.getSession(event.user!);
+        const session = SessionManager.getSession("channel", event.user!, event.channel);
 
         app.client.reactions.add({
           name: "ok_hand",
