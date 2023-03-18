@@ -43,6 +43,8 @@ const setup = (app: App) => {
         channel: command.channel_id,
         user: command.user_id,
         text: `대화 세션이 종료되었습니다. 다시 시작하려면 <@${context.botUserId}>를 언급해주세요.`,
+      }).catch(e => {
+        console.error(e);
       })
     }
   });
@@ -102,6 +104,8 @@ const setup = (app: App) => {
       name: "hourglass",
       channel: message.channel,
       timestamp: message.ts,
+    }).catch(e => {
+      console.error(e);
     });
 
     const session = SessionManager.getSession(message.channel_type, message.user);
@@ -112,6 +116,8 @@ const setup = (app: App) => {
       name: "hourglass",
       channel: message.channel,
       timestamp: message.ts,
+    }).catch(e => {
+      console.error(e);
     });
 
     const blocks = formatResponse(response);
