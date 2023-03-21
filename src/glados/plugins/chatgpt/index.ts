@@ -13,12 +13,7 @@ import openai from "../../utils/openai";
 import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
 import { chatCompletion, formatResponse } from "./handlers";
-
-// 캐릭터 셋업
-const BOT_CHARACTER: ChatCompletionRequestMessage = {
-  role: "system",
-  content: "Use Korean as possible. Try to be nice.",
-};
+import { ClientRequest } from "http";
 
 /** test if message is a direct message or a channel message */
 function isGenericMessageEvent(message: any): message is GenericMessageEvent {
@@ -31,30 +26,40 @@ function isGenericMessageEvent(message: any): message is GenericMessageEvent {
 /** test if message has audio files */
 function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
   return (
+    // isGenericMessageEvent(message) &&
     message.subtype === "file_share" &&
-    message.files.length > 0 &&
+    message.files?.length > 0 &&
     message.files[0]?.media_display_type === "audio"
   );
 }
 
-// 채팅 초기화 블록
-const sessionManageToolbar: KnownBlock[] = [
-  Actions([
-    Button("대화세션 종료", {
-      id: "chatgpt:clearSession",
-      value: "chatgpt:clearSession",
-      style: "danger",
-    }),
-  ]),
-];
-
 const setup = (app: App) => {
-  app.message(async ({ message, say, context }) => {
+  // XXX: experimental 채팅 초기화
+  app.command("/clearsession", async ({ command, ack, client, context }) => {
+    await ack();
+    if (SessionManager.hasSession(command.user_id, command.channel_id)) {
+      SessionManager.clearSession(command.user_id, command.channel_id);
+      const guide = command.thread_ts
+        ? `언제든지 새로운 대화를 시작할 수 있습니다.`
+        : `다시 시작하려면 채널에서 <@${context.botUserId}>를 언급해주세요.`;
+      await client.chat
+        .postEphemeral({
+          channel: command.channel_id,
+          user: command.user_id,
+          text: `대화 세션이 종료되었습니다. ${guide}`,
+        })
+        .catch((e) => {
+          console.error(e);
+        });
+    }
+  });
+
+  app.message(async ({ message, say, client, context }) => {
     if (!isGenericMessageEvent(message)) {
       return;
     }
     // debug print
-    console.info("Message received: ", message);
+    console.info(`<@${message.user}> ${message.text}`);
 
     // DM 또는 멀티채널에서 봇을 언급한 경우
     const isDirectMessage =
@@ -68,7 +73,7 @@ const setup = (app: App) => {
       !(
         isDirectMessage ||
         isMentioned ||
-        SessionManager.hasSession(message.user)
+        SessionManager.hasActiveSession(message.user, message.channel)
       )
     ) {
       return;
@@ -82,6 +87,7 @@ const setup = (app: App) => {
       // 오디오 첨부파일이 있는 경우
       if (isAudioMessageEvent(message)) {
         // TODO: whisper로 stt 한다음 content에 넣는다.
+        // console.info("audio attached!", message.files?[0]);
       }
       return;
     }
@@ -99,41 +105,46 @@ const setup = (app: App) => {
     }
 
     // 메시지에 모래시계 이모티콘 붙이기
-    app.client.reactions.add({
-      name: "hourglass",
-      channel: message.channel,
-      timestamp: message.ts,
-    });
+    app.client.reactions
+      .add({
+        name: "hourglass",
+        channel: message.channel,
+        timestamp: message.ts,
+      })
+      .catch((e) => {
+        console.error(e);
+      });
 
-    const session = SessionManager.getSession(message.user);
+    const session = SessionManager.getSession(
+      message.channel_type,
+      message.user,
+      message.channel
+    );
     const response = await chatCompletion(content, session);
 
     // 메시지에서 모래시계 이모티콘 제거
-    app.client.reactions.remove({
-      name: "hourglass",
-      channel: message.channel,
-      timestamp: message.ts,
-    });
+    app.client.reactions
+      .remove({
+        name: "hourglass",
+        channel: message.channel,
+        timestamp: message.ts,
+      })
+      .catch((e) => {
+        console.error(e);
+      });
 
     const blocks = formatResponse(response);
 
-    await say({
-      text: response,
-      blocks,
-      thread_ts: message.thread_ts,
-    });
-  });
-
-  // TODO: 채팅을 초기화하는 액션
-  app.action("chatgpt:clearSession", async ({ ack, say, body, context }) => {
-    await ack();
-    const sayGoodbye = body.channel
-      ? `<@${body.user.id}> 대화를 종료합니다.`
-      : "대화를 종료합니다.";
-    say({
-      text: `${sayGoodbye} 다시 대화하시려면 DM으로 말씀하시거나 채널에서 <@${context.botUserId}>를 언급해주세요.`,
-    });
-    SessionManager.clearSession(body.user.id);
+    try {
+      await say({
+        text: response,
+        blocks,
+        thread_ts: message.thread_ts,
+      });
+      console.info(`<@${context.botUserId}> ${response}`);
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   app.event("app_mention", async ({ event, say, client }) => {
@@ -145,8 +156,11 @@ const setup = (app: App) => {
         limit: 1,
       });
       if (thread.messages?.length ?? 0 > 0) {
-        SessionManager.clearSession(event.user!); // 컨텍스트 전환을 위해 세션을 초기화함
-        const session = SessionManager.getSession(event.user!);
+        const session = SessionManager.getSession(
+          "channel",
+          event.user!,
+          event.channel
+        );
 
         app.client.reactions.add({
           name: "ok_hand",
@@ -155,10 +169,12 @@ const setup = (app: App) => {
         });
 
         // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
-        const response = await chatCompletion(
-          thread.messages![0].text!,
-          session
-        );
+        // 언급에 추가 메시지가 있는 경우에는 그 메시지도 사용자 발화로 간주
+        let prompt = thread.messages![0].text!;
+        if (event.text.length > 0) {
+          prompt += `\n${event.text}`;
+        }
+        const response = await chatCompletion(prompt, session);
 
         app.client.reactions.remove({
           name: "ok_hand",

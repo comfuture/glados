@@ -28,7 +28,7 @@ export async function chatCompletion(
   messages.push({ content: prompt, role: "user" });
 
   const result = await openai.createChatCompletion({
-    model: "gpt-3.5-turbo",
+    model: process.env.OPENAI_MODEL ?? "gpt-3.5-turbo",
     messages,
     max_tokens: 1024,
     temperature: 0.6,

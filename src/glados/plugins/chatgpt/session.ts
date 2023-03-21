@@ -4,6 +4,7 @@ import type {
 } from "openai";
 
 import GPT3Tokenizer from "gpt3-tokenizer";
+import { channelTypes } from "@slack/bolt/dist/types/events/message-events";
 
 const tokenizer = new GPT3Tokenizer({ type: "gpt3" });
 
@@ -13,14 +14,18 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 
 /** ChatGPT의 메시지 이력을 저장하는 클래스 */
 export class ChatSession {
-  private ttl: number = 120 * 1000;
+  private ttl: number = 60 * 5 * 1000; // 5분
   private lastAccessTime: number = Date.now();
   private history: [number, ChatCompletionRequestMessage][];
   private _user?: string;
+  private _channel?: string;
+  private _type: channelTypes = "channel";
 
-  constructor(user: string) {
+  constructor(type: channelTypes, user?: string, channel?: string) {
     this.history = [];
     this._user = user;
+    this._channel = channel;
+    this._type = type;
   }
 
   public get user(): string | undefined {
@@ -45,10 +50,11 @@ export class ChatSession {
 
     this.history.push([tokenSize, { role, content }]);
 
-    // 총 토큰수가 3072를 넘으면 히스토리를 앞에서부터 제거한다.
+    // 총 토큰수가 maxToken - 1000을 넘으면 히스토리를 앞에서부터 제거한다.
     // TODO: 제거하지 말고 요약해서 앞에 추가하면 더 좋음
+    const maxTokens = +(process.env.OPENAI_MAX_TOKEN ?? 4096);
     const totalTokenSize = this.history.reduce((acc, [len]) => acc + len, 0);
-    const tobeForgotten = totalTokenSize - 3072;
+    const tobeForgotten = totalTokenSize - maxTokens - 1000;
     if (tobeForgotten > 0) {
       let forgotten = 0;
       while (forgotten < tobeForgotten) {
@@ -64,9 +70,17 @@ export class ChatSession {
     this.history = [];
   }
 
-  /** 대화가 {ttl}이상 정체되어 있으면 종료되었다고 가정합니다 */
+  /** 대화가 {ttl}이상 정체되어 있으면 종료되었다고 가정합니다.
+   * 세션타잎이 channel이 아닌 경우에는 만료되지 않습니다.
+   */
   public isRotten(): boolean {
-    return Date.now() - this.lastAccessTime > this.ttl;
+    return (
+      this._type === "channel" && Date.now() - this.lastAccessTime > this.ttl
+    );
+  }
+
+  public isActive(): boolean {
+    return Date.now() - this.lastAccessTime <= this.ttl;
   }
 }
 
@@ -74,25 +88,42 @@ export class ChatSession {
 export class SessionManager {
   private static sessions: Map<string, ChatSession> = new Map();
 
-  public static getSession(user: string): ChatSession {
-    if (!this.sessions.has(user)) {
-      const newSession = new ChatSession(user);
-      SessionManager.sessions.set(user, newSession);
+  public static getSession(
+    type: channelTypes,
+    user: string,
+    channel?: string
+  ): ChatSession {
+    const key = `${user}|${channel}`;
+    if (!SessionManager.sessions.has(key)) {
+      const newSession = new ChatSession(type, user, channel);
+      SessionManager.sessions.set(key, newSession);
       return newSession;
     }
-    const session = this.sessions.get(user);
-    if (!session || session?.isRotten()) {
-      SessionManager.sessions.delete(user);
-      return SessionManager.getSession(user);
+    const session = SessionManager.sessions.get(key);
+    if (!session || !session?.isActive()) {
+      SessionManager.sessions.delete(key);
+      return SessionManager.getSession(type, user, channel);
     }
     return session;
   }
 
-  public static hasSession(user: string): boolean {
-    return this.sessions.has(user) && !this.sessions.get(user)?.isRotten();
+  public static hasSession(user: string, channel?: string): boolean {
+    const key = `${user}|${channel}`;
+    return (
+      SessionManager.sessions.has(key) && !this.sessions.get(key)?.isRotten()
+    );
   }
 
-  public static clearSession(user: string) {
-    this.sessions.delete(user);
+  public static hasActiveSession(user: string, channel?: string): boolean {
+    const key = `${user}|${channel}`;
+    console.log("hasActiveSession", key, SessionManager.sessions);
+    return (
+      SessionManager.sessions.has(key) && !!this.sessions.get(key)?.isActive()
+    );
+  }
+
+  public static clearSession(user: string, channel?: string) {
+    const key = `${user}|${channel}`;
+    SessionManager.sessions.delete(key);
   }
 }

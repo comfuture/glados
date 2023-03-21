@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "dev": "ts-node src/app.ts",
-    "serve": "ts-node src/app.ts"
+    "serve": "node src/app.js"
   },
   "author": "",
   "license": "ISC",
@@ -15,6 +15,7 @@
     "@slack/bolt": "^3.12.2",
     "gpt3-tokenizer": "^1.1.5",
     "openai": "^3.2.1",
+    "sanitize-filename": "^1.6.3",
     "shell-quote": "^1.8.0"
   },
   "devDependencies": {
