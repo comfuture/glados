@@ -39,11 +39,14 @@ const setup = (app: App) => {
     await ack();
     if (SessionManager.hasSession(command.user_id, command.channel_id)) {
       SessionManager.clearSession(command.user_id, command.channel_id);
+      const guide = command.thread_ts
+        ? `언제든지 새로운 대화를 시작할 수 있습니다.`
+        : `다시 시작하려면 채널에서 <@${context.botUserId}>를 언급해주세요.`;
       await client.chat
         .postEphemeral({
           channel: command.channel_id,
           user: command.user_id,
-          text: `대화 세션이 종료되었습니다. 다시 시작하려면 <@${context.botUserId}>를 언급해주세요.`,
+          text: `대화 세션이 종료되었습니다. ${guide}`,
         })
         .catch((e) => {
           console.error(e);
