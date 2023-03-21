@@ -14,7 +14,7 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 
 /** ChatGPT의 메시지 이력을 저장하는 클래스 */
 export class ChatSession {
-  private ttl: number = 60 * 5 * 1000;  // 5분
+  private ttl: number = 60 * 5 * 1000; // 5분
   private lastAccessTime: number = Date.now();
   private history: [number, ChatCompletionRequestMessage][];
   private _user?: string;
@@ -74,7 +74,9 @@ export class ChatSession {
    * 세션타잎이 channel이 아닌 경우에는 만료되지 않습니다.
    */
   public isRotten(): boolean {
-    return this._type === "channel" && Date.now() - this.lastAccessTime > this.ttl;
+    return (
+      this._type === "channel" && Date.now() - this.lastAccessTime > this.ttl
+    );
   }
 
   public isActive(): boolean {
@@ -86,15 +88,19 @@ export class ChatSession {
 export class SessionManager {
   private static sessions: Map<string, ChatSession> = new Map();
 
-  public static getSession(type: channelTypes, user: string, channel?: string): ChatSession {
-    const key = `${user}|${channel}`
-    if (!this.sessions.has(key)) {
+  public static getSession(
+    type: channelTypes,
+    user: string,
+    channel?: string
+  ): ChatSession {
+    const key = `${user}|${channel}`;
+    if (!SessionManager.sessions.has(key)) {
       const newSession = new ChatSession(type, user, channel);
-      SessionManager.sessions.set(user, newSession);
+      SessionManager.sessions.set(key, newSession);
       return newSession;
     }
-    const session = this.sessions.get(key);
-    if (!session || session?.isRotten()) {
+    const session = SessionManager.sessions.get(key);
+    if (!session || !session?.isActive()) {
       SessionManager.sessions.delete(key);
       return SessionManager.getSession(type, user, channel);
     }
@@ -102,16 +108,22 @@ export class SessionManager {
   }
 
   public static hasSession(user: string, channel?: string): boolean {
-    const key = `${user}|${channel}`
-    return this.sessions.has(key) && !this.sessions.get(key)?.isRotten();
+    const key = `${user}|${channel}`;
+    return (
+      SessionManager.sessions.has(key) && !this.sessions.get(key)?.isRotten()
+    );
   }
 
   public static hasActiveSession(user: string, channel?: string): boolean {
-    const key = `${user}|${channel}`
-    return this.sessions.has(key) && !!this.sessions.get(key)?.isActive();
+    const key = `${user}|${channel}`;
+    console.log("hasActiveSession", key, SessionManager.sessions);
+    return (
+      SessionManager.sessions.has(key) && !!this.sessions.get(key)?.isActive()
+    );
   }
 
   public static clearSession(user: string, channel?: string) {
-    this.sessions.delete(user);
+    const key = `${user}|${channel}`;
+    SessionManager.sessions.delete(key);
   }
 }

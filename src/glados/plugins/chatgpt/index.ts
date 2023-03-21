@@ -35,17 +35,19 @@ function isAudioMessageEvent(message: any): message is FileShareMessageEvent {
 
 const setup = (app: App) => {
   // XXX: experimental 채팅 초기화
-  app.command("/clearSession", async ({ command, ack, say, client, context }) => {
+  app.command("/clearsession", async ({ command, ack, client, context }) => {
     await ack();
-    if (SessionManager.hasSession(command.user.id, command.channel_id)) {
-      SessionManager.clearSession(command.user.id, command.channel_id);
-      await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: command.user_id,
-        text: `대화 세션이 종료되었습니다. 다시 시작하려면 <@${context.botUserId}>를 언급해주세요.`,
-      }).catch(e => {
-        console.error(e);
-      })
+    if (SessionManager.hasSession(command.user_id, command.channel_id)) {
+      SessionManager.clearSession(command.user_id, command.channel_id);
+      await client.chat
+        .postEphemeral({
+          channel: command.channel_id,
+          user: command.user_id,
+          text: `대화 세션이 종료되었습니다. 다시 시작하려면 <@${context.botUserId}>를 언급해주세요.`,
+        })
+        .catch((e) => {
+          console.error(e);
+        });
     }
   });
 
@@ -100,25 +102,33 @@ const setup = (app: App) => {
     }
 
     // 메시지에 모래시계 이모티콘 붙이기
-    app.client.reactions.add({
-      name: "hourglass",
-      channel: message.channel,
-      timestamp: message.ts,
-    }).catch(e => {
-      console.error(e);
-    });
+    app.client.reactions
+      .add({
+        name: "hourglass",
+        channel: message.channel,
+        timestamp: message.ts,
+      })
+      .catch((e) => {
+        console.error(e);
+      });
 
-    const session = SessionManager.getSession(message.channel_type, message.user);
+    const session = SessionManager.getSession(
+      message.channel_type,
+      message.user,
+      message.channel
+    );
     const response = await chatCompletion(content, session);
 
     // 메시지에서 모래시계 이모티콘 제거
-    app.client.reactions.remove({
-      name: "hourglass",
-      channel: message.channel,
-      timestamp: message.ts,
-    }).catch(e => {
-      console.error(e);
-    });
+    app.client.reactions
+      .remove({
+        name: "hourglass",
+        channel: message.channel,
+        timestamp: message.ts,
+      })
+      .catch((e) => {
+        console.error(e);
+      });
 
     const blocks = formatResponse(response);
 
@@ -143,7 +153,11 @@ const setup = (app: App) => {
         limit: 1,
       });
       if (thread.messages?.length ?? 0 > 0) {
-        const session = SessionManager.getSession("channel", event.user!, event.channel);
+        const session = SessionManager.getSession(
+          "channel",
+          event.user!,
+          event.channel
+        );
 
         app.client.reactions.add({
           name: "ok_hand",
