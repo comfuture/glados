@@ -51,6 +51,7 @@ const setup = (app: App) => {
     await say({
       channel: command.channel_id,
       thread_ts: command.thread_ts,
+      text: command.text,
       blocks: [Context([Text(command.text)])],
     });
 

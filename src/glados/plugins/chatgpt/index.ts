@@ -12,7 +12,7 @@ import openai from "../../utils/openai";
 
 import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
-import { chatCompletion, formatResponse } from "./handlers";
+import { chatCompletionStream, createCompletionHandler } from "./handlers";
 import { ClientRequest } from "http";
 
 /** test if message is a direct message or a channel message */
@@ -59,6 +59,9 @@ const setup = (app: App) => {
       return;
     }
     // debug print
+    if (!message.user) {
+      return;
+    }
     console.info(`<@${message.user}> ${message.text}`);
 
     // DM 또는 멀티채널에서 봇을 언급한 경우
@@ -120,31 +123,34 @@ const setup = (app: App) => {
       message.user,
       message.channel
     );
-    const response = await chatCompletion(content, session);
 
-    // 메시지에서 모래시계 이모티콘 제거
-    app.client.reactions
-      .remove({
-        name: "hourglass",
-        channel: message.channel,
-        timestamp: message.ts,
-      })
-      .catch((e) => {
-        console.error(e);
-      });
+    const handler = createCompletionHandler({
+      say,
+      client,
+      channel: message.channel,
+      thread_ts: message.thread_ts,
+    });
 
-    const blocks = formatResponse(response);
+    const chatCompletion = await chatCompletionStream(
+      message.text ?? "",
+      handler,
+      session
+    );
 
-    try {
-      await say({
-        text: response,
-        blocks,
-        thread_ts: message.thread_ts,
-      });
-      console.info(`<@${context.botUserId}> ${response}`);
-    } catch (e) {
-      console.error(e);
-    }
+    chatCompletion.on("end", async (resp: string) => {
+      session.addHistory(resp, "assistant");
+
+      // 메시지에서 모래시계 이모티콘 제거
+      await app.client.reactions
+        .remove({
+          name: "hourglass",
+          channel: message.channel,
+          timestamp: message.ts,
+        })
+        .catch((e) => {
+          console.error(e);
+        });
+    });
   });
 
   app.event("app_mention", async ({ event, say, client }) => {
@@ -170,38 +176,49 @@ const setup = (app: App) => {
 
         // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
         // 언급에 추가 메시지가 있는 경우에는 그 메시지도 사용자 발화로 간주
-        let prompt = thread.messages![0].text!;
-        if (event.text.length > 0) {
-          prompt += `\n${event.text}`;
-        }
-        const response = await chatCompletion(prompt, session);
+        // let prompt = thread.messages![0].text!;
+        // if (event.text.length > 0) {
+        //   prompt += `\n${event.text}`;
+        // }
 
-        app.client.reactions.remove({
-          name: "ok_hand",
+        const handler = createCompletionHandler({
+          say,
+          client,
           channel: event.channel,
-          timestamp: event.ts,
+          thread_ts: event.thread_ts,
         });
 
-        const blocks = formatResponse(response);
-        await say({
-          text: response,
-          blocks,
-          thread_ts: thread.messages![0].thread_ts,
+        const chatCompletion = await chatCompletionStream(
+          event.text,
+          handler,
+          session
+        );
+
+        chatCompletion.on("end", async (resp: string) => {
+          console.log("stream end", resp);
+          session.addHistory(resp, "assistant");
+
+          // 메시지에서 모래시계 이모티콘 제거
+          await app.client.reactions.remove({
+            name: "ok_hand",
+            channel: event.channel,
+            timestamp: event.ts,
+          });
         });
       }
     } else {
       // TODO: 유저의 최근 대화를 n개 가져와 응답
-      const history = await client.conversations.history({
-        channel: event.channel,
-        user: event.user,
-        latest: event.ts,
-        inclusive: false,
-      });
-      history.messages;
-      console.log("-----");
-      for (const message of history.messages ?? []) {
-        console.log(message);
-      }
+      // const history = await client.conversations.history({
+      //   channel: event.channel,
+      //   user: event.user,
+      //   latest: event.ts,
+      //   inclusive: false,
+      // });
+      // history.messages;
+      // console.log("-----");
+      // for (const message of history.messages ?? []) {
+      //   console.log(message);
+      // }
     }
   });
 };

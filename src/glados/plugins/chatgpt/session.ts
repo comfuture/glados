@@ -116,7 +116,7 @@ export class SessionManager {
 
   public static hasActiveSession(user: string, channel?: string): boolean {
     const key = `${user}|${channel}`;
-    console.log("hasActiveSession", key, SessionManager.sessions);
+    if (!user) return false;
     return (
       SessionManager.sessions.has(key) && !!this.sessions.get(key)?.isActive()
     );
