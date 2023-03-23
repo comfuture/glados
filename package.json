@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc --outDir dist",
     "dev": "ts-node src/app.ts",
-    "serve": "node src/app.js"
+    "serve": "node dist/app.js"
   },
   "author": "",
   "license": "ISC",
