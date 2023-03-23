@@ -1,70 +1,155 @@
-import type { Block, KnownBlock } from "@slack/types";
+import { WebClient } from "@slack/web-api";
+import { SayFn } from "@slack/bolt";
 import type { ChatCompletionRequestMessage } from "openai";
-import { Markdown, Section } from "../../blocks";
-import openai from "../../utils/openai";
-import { ChatSession } from "./session";
+import { Context, Markdown, Section, Text } from "../../blocks";
+export { chatCompletionStream } from "../../utils/openai";
 
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
   role: "system",
   content: "Use Korean as possible. Try to be nice.",
 };
 
-/** 주어진 프롬프트에 대한 chatgpt 응답을 얻는다.
- * 세션이 주어진 경우 이전 대화내용을 문맥으로 삼으며, 프롬프트 질문과 응답을 세션에 추가한다.
- */
-export async function chatCompletion(
-  prompt: string,
-  session?: ChatSession
-): Promise<string> {
-  let messages: ChatCompletionRequestMessage[] = [BOT_CHARACTER];
+type PartialSlackContext = {
+  say: SayFn;
+  client: WebClient;
+  channel: string;
+  thread_ts?: string;
+};
 
-  if (session) {
-    // 세션이 주어진 경우 이전 세션의 대화 내용을 가져옴
-    messages.push.apply(messages, session.getHistory());
+export function createCompletionHandler({
+  say,
+  client,
+  channel,
+  thread_ts,
+}: PartialSlackContext): (text: string) => Promise<void> {
+  let flag: "markdown" | "sourceblock" | "list" = "markdown";
+  let lastTs = "";
+  let lastMessage = "";
+  return async (line: string) => {
+    let oldFlag = "" + flag;
 
-    // 프롬프트를 세션 이력에 추가
-    session.addHistory(prompt, "user");
-  }
-  messages.push({ content: prompt, role: "user" });
+    // line = line.trim();
+    if (line.trim() === "") {
+      return;
+    }
 
-  const result = await openai.createChatCompletion({
-    model: process.env.OPENAI_MODEL ?? "gpt-3.5-turbo",
-    messages,
-    max_tokens: 1024,
-    temperature: 0.6,
-    frequency_penalty: 0.4,
-    user: session?.user,
-  });
+    // console.log(">>>", line);
+    // return;
 
-  const response = result.data.choices[0].message?.content!.trim()!;
-  session?.addHistory(response, "assistant");
-  return response;
-}
+    // if message starts with ``` or ```{language}, toggle flag to sourceblock / markdown
+    if (/^\`\`\`/.test(line)) {
+      if (oldFlag === "sourceblock") {
+        // if flag is already sourceblock, set flag to markdown
+        lastMessage = "";
+        flag = "markdown";
+      } else {
+        // if flag was not sourceblock, toggle flag to sourceblock
+        lastMessage = "";
+        flag = "sourceblock";
+        // get source code language
+        /^`{3}([\S]+)?\n/;
+        const language = line.match(/^`{3}([\S]+)?\n/)?.[1];
+        if (language !== undefined) {
+          // if language is given, say it
+          await say({
+            text: `source: ${language}`,
+            blocks: [Context([Text(language!)])],
+            thread_ts,
+          });
+          line.replace(language, "");
+        }
+      }
+      line = "";
+    } else if (
+      line.trim().startsWith("- ") ||
+      line.trim().startsWith("* ") ||
+      /\d+\. /.test(line.trim())
+    ) {
+      // if message presents markdown list, set flag to list
+      if (oldFlag !== "list") {
+        lastMessage = "";
+      }
+      flag = "list";
+    } else if (oldFlag === "list") {
+      // if message wat list but now it is not, set flag to markdown
+      lastMessage = "";
+      flag = "markdown";
+    } else if (oldFlag === "sourceblock") {
+      // if message was sourceblock and found nothing special, leave flag to sourceblock
+      flag = "sourceblock";
+    }
 
-/** 응답을 슬랙 BlockKit 으로 포메팅한다. */
-export function formatResponse(response: string): Block[] | KnownBlock[] {
-  if (/\`\`\`/.test(response)) {
-    // 코드블럭이 포함된 경우
-    // 코드 블럭을 기준으로 나누어 일반 블럭은 텍스트로, 코드블럭은 마크다운 블럭으로 만듬
-    // 코드 스니펫으로 만들어서 보내면 더 좋을 것 같은데... BlockKit처럼 여러번 반복 등장할 수 없다.
-    const blocks: Block[] | KnownBlock[] = response
-      .split(/\`\`\`/)
-      .map((v, i) => {
-        if (i % 2 === 0) {
-          return Section({ text: Markdown(v) });
-        } else {
-          const langaugeMatch = /^(#?\S+)/.exec(v);
-          if (langaugeMatch) {
-            langaugeMatch[1];
-            v = v.replace(/^(#?\S+)/, "");
-          }
-          return Section({
-            text: Markdown("```" + v + "```"),
+    switch (flag) {
+      case "sourceblock":
+        if (oldFlag !== "sourceblock") {
+          // if flag is changed, send it
+          lastMessage = line;
+          // console.log("flag is changed to sourceblock", line);
+          const r = await say({
+            text: lastMessage,
+            blocks: [
+              Section({
+                text: Markdown("```\n" + lastMessage ?? "..." + "\n```"),
+              }),
+            ],
+            thread_ts,
+          });
+          lastTs = r.ts!;
+        } else if (lastTs !== "") {
+          // if flag is not changed, update it
+          // console.log("flag is still sourceblock", line);
+          lastMessage += line;
+          await client?.chat.update({
+            ts: lastTs,
+            channel,
+            text: lastMessage,
+            blocks: [
+              Section({ text: Markdown("```\n" + lastMessage + "\n```") }),
+            ],
+            thread_ts,
           });
         }
-      });
-    return blocks;
-  } else {
-    return [Section({ text: Markdown(response) })];
-  }
+        break;
+      case "list":
+        if (oldFlag !== "list") {
+          // if flag is changed, send it
+          // console.log("flag is changed to list", line);
+          lastMessage = line;
+          const r = await say({
+            text: lastMessage,
+            blocks: [Section({ text: Markdown(line) })],
+            thread_ts,
+          });
+          lastTs = r.ts!;
+        } else if (lastTs !== "") {
+          // if flag is not changed, update it
+          // console.log("flag is still list");
+          lastMessage += line;
+          await client?.chat.update({
+            ts: lastTs,
+            channel,
+            text: lastMessage,
+            blocks: [Section({ text: Markdown(lastMessage) })],
+            thread_ts,
+          });
+        }
+        break;
+      case "markdown":
+        // console.log("flag is markdown", line);
+        if (!line) {
+          break;
+        }
+        if (line.startsWith("#")) {
+          // replace leading # with *
+          line = line.replace(/^#+ /, "*").replace(/\n$/, "*\n");
+        }
+
+        await say({
+          text: line,
+          blocks: [Section({ text: Markdown(line) })],
+          thread_ts,
+        });
+        break;
+    }
+  };
 }
