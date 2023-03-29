@@ -49,7 +49,7 @@ export async function chatCompletionStream(
       temperature: 0.7,
       n: 1,
       max_tokens:
-        (parseInt(process.env.OPENAI_MAX_TOKEN ?? "4037"), 10) -
+        parseInt(process.env.OPENAI_MAX_TOKEN ?? "4037", 10) -
         (session?.promptTokens ?? 1024),
       frequency_penalty: 0.2,
       stream: true,
