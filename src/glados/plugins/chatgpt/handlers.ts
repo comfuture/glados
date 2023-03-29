@@ -1,13 +1,7 @@
 import { WebClient } from "@slack/web-api";
 import { SayFn } from "@slack/bolt";
-import type { ChatCompletionRequestMessage } from "openai";
 import { Context, Markdown, Section, Text } from "../../blocks";
 export { chatCompletionStream } from "../../utils/openai";
-
-const BOT_CHARACTER: ChatCompletionRequestMessage = {
-  role: "system",
-  content: "Use Korean as possible. Try to be nice.",
-};
 
 type PartialSlackContext = {
   say: SayFn;

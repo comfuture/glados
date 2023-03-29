@@ -12,6 +12,11 @@ const tokenizer = new GPT3Tokenizer({ type: "gpt3" });
 const USER_TOKEN_LEN = tokenizer.encode("<user>").bpe.length;
 const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 
+const BOT_CHARACTER: ChatCompletionRequestMessage = {
+  role: "system",
+  content: "Use Korean as possible. Try to be nice.",
+};
+
 /** ChatGPT의 메시지 이력을 저장하는 클래스 */
 export class ChatSession {
   private ttl: number = 60 * 5 * 1000; // 5분
@@ -22,7 +27,12 @@ export class ChatSession {
   private _type: channelTypes = "channel";
 
   constructor(type: channelTypes, user?: string, channel?: string) {
-    this.history = [];
+    this.history = [
+      [
+        tokenizer.encode(`<system>${BOT_CHARACTER.content}`).bpe.length,
+        BOT_CHARACTER,
+      ],
+    ];
     this._user = user;
     this._channel = channel;
     this._type = type;
@@ -35,6 +45,11 @@ export class ChatSession {
   /** 히스토리를 가져온다 */
   public getHistory(): ChatCompletionRequestMessage[] {
     return this.history.map(([, message]) => message);
+  }
+
+  /** 히스토리의 총 토큰수를 가져온다 */
+  public get promptTokens(): number {
+    return this.history.reduce((acc, [len]) => acc + len, 0);
   }
 
   /** 히스토리를 추가한다. 히스토리가 너무 긴 경우 앞에서부터 서서히 잊는다.

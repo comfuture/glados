@@ -32,10 +32,12 @@ export async function chatCompletionStream(
   session?: ChatSession
 ): Promise<EventEmitter> {
   const messages: ChatCompletionRequestMessage[] = [];
+
   if (session) {
     session.addHistory(prompt, "user");
     messages.push.apply(messages, session.getHistory());
   } else {
+    // If no session is provided, just use the prompt as the first message
     messages.push({ role: "user", content: prompt });
   }
 
@@ -46,7 +48,7 @@ export async function chatCompletionStream(
       messages,
       temperature: 0.7,
       n: 1,
-      max_tokens: 1024,
+      max_tokens: session?.promptTokens ?? 1024,
       frequency_penalty: 0.2,
       stream: true,
     },
@@ -77,11 +79,10 @@ export async function chatCompletionStream(
           if (line.includes("\n")) {
             const lines = line.split("\n");
 
-            // replace empty lines with a \n
-
             line = lines.pop() ?? "";
             lines.forEach(async (line_) => {
               if (!line_.trim()) {
+                // replace empty lines with a \n
                 line_ = "\n";
               }
               await streamHandler(`${line_}\n`);
@@ -96,6 +97,7 @@ export async function chatCompletionStream(
   );
 
   (resp.data as any as NodeJS.ReadableStream).on("end", () => {
+    // if there is a line left, emit it
     if (line) {
       streamHandler(line);
       emitter.emit("line", line);
