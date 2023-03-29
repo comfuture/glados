@@ -21,6 +21,8 @@ jobs:
         echo SLACK_APP_TOKEN=$SLACK_APP_TOKEN >> .env
         echo SLACK_SIGNING_SECRET=$SLACK_SIGNING_SECRET >> .env
         echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+        echo OPENAI_MODEL=$OPENAI_MODEL >> .env
+        echo OPENAI_MAX_TOKEN=$OPENAI_MAX_TOKEN >> .env
     - name: send files to server
       run: |
         sh -c "rsync -avzO --delete --exclude=__pycache__ --exclude=node_modules \
