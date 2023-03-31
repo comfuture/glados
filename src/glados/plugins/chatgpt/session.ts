@@ -14,8 +14,11 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
   role: "system",
-  content: "Use Korean as possible. Try to be nice.",
+  content: "Try to be nice.",
 };
+
+const { bpe } = tokenizer.encode(`<system> ${BOT_CHARACTER.content}`);
+const BOT_CHARACTER_LEN = bpe.length;
 
 /** ChatGPT의 메시지 이력을 저장하는 클래스 */
 export class ChatSession {
@@ -27,12 +30,7 @@ export class ChatSession {
   private _type: channelTypes = "channel";
 
   constructor(type: channelTypes, user?: string, channel?: string) {
-    this.history = [
-      [
-        tokenizer.encode(`<system>${BOT_CHARACTER.content}`).bpe.length,
-        BOT_CHARACTER,
-      ],
-    ];
+    this.history = [];
     this._user = user;
     this._channel = channel;
     this._type = type;
@@ -44,7 +42,7 @@ export class ChatSession {
 
   /** 히스토리를 가져온다 */
   public getHistory(): ChatCompletionRequestMessage[] {
-    return this.history.map(([, message]) => message);
+    return [BOT_CHARACTER, ...this.history.map(([, message]) => message)];
   }
 
   /** 히스토리의 총 토큰수를 가져온다 */
@@ -65,11 +63,11 @@ export class ChatSession {
 
     this.history.push([tokenSize, { role, content }]);
 
-    // 총 토큰수가 maxToken - 1000을 넘으면 히스토리를 앞에서부터 제거한다.
-    // TODO: 제거하지 말고 요약해서 앞에 추가하면 더 좋음
+    // 총 토큰수가 maxToken - 1024를 넘으면 히스토리를 앞에서부터 제거한다.
+    // TODO: 제거하지 말고 요약해서 앞에 추가하면 더 좋음. 그런데 비용이 발생하고 느려짐.
     const maxTokens = +(process.env.OPENAI_MAX_TOKEN ?? 4096);
     const totalTokenSize = this.history.reduce((acc, [len]) => acc + len, 0);
-    const tobeForgotten = totalTokenSize - maxTokens - 1000;
+    const tobeForgotten = totalTokenSize + BOT_CHARACTER_LEN - maxTokens - 1024;
     if (tobeForgotten > 0) {
       let forgotten = 0;
       while (forgotten < tobeForgotten) {

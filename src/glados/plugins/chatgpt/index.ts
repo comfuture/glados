@@ -135,9 +135,28 @@ const setup = (app: App) => {
       message.text ?? "",
       handler,
       session
-    );
+    ).catch(async () => {
+      await app.client.reactions
+        .add({
+          name: "x",
+          channel: message.channel,
+          timestamp: message.ts,
+        })
+        .catch((e) => {
+          console.error(e);
+        });
+      await app.client.reactions
+        .remove({
+          name: "hourglass",
+          channel: message.channel,
+          timestamp: message.ts,
+        })
+        .catch((e) => {
+          console.error(e);
+        });
+    });
 
-    chatCompletion.on("end", async (resp: string) => {
+    chatCompletion?.on("end", async (resp: string) => {
       session.addHistory(resp, "assistant");
 
       // 메시지에서 모래시계 이모티콘 제거
