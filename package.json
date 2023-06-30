@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsup src/app.ts",
+    "build": "tsup-node",
     "dev": "tsx src/app.ts",
     "preserve": "yarn build",
     "serve": "node dist/app.js"
