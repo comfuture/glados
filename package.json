@@ -5,23 +5,26 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc --outDir dist",
-    "dev": "ts-node src/app.ts",
-    "serve": "node src/app.js"
+    "build": "tsup src/app.ts",
+    "dev": "tsx src/app.ts",
+    "preserve": "yarn build",
+    "serve": "node dist/app.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@slack/bolt": "^3.12.2",
+    "@slack/bolt": "^3.13.1",
     "gpt3-tokenizer": "^1.1.5",
-    "openai": "^3.2.1",
+    "openai": "^3.3.0",
     "sanitize-filename": "^1.6.3",
     "shell-quote": "^1.8.0"
   },
   "devDependencies": {
+    "@pinecone-database/pinecone": "^0.1.6",
     "@types/shell-quote": "^1.7.1",
     "dotenv": "^16.0.3",
-    "ts-node": "^10.9.1",
-    "typescript": "^4.9.5"
+    "tsup": "^7.1.0",
+    "tsx": "^3.12.7",
+    "typescript": "^5.1.6"
   }
 }
