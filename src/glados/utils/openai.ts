@@ -1,8 +1,8 @@
 import "./ensure_env";
 import { ChatCompletionRequestMessage, Configuration, OpenAIApi } from "openai";
-import { ReadableStream } from "stream/web";
 import { EventEmitter } from "stream";
 import { ChatSession } from "../plugins/chatgpt/session";
+import { invokeFunction } from "../plugins/chatgpt/functions";
 
 const cachedAPIClients = new Map<string, OpenAIApi>();
 
@@ -27,21 +27,31 @@ export function useOpenAI(apiKey: string): OpenAIApi {
 }
 
 export async function chatCompletionStream(
-  prompt: string,
+  message: ChatCompletionRequestMessage,
   streamHandler: (message: string) => Promise<void>,
   session?: ChatSession
 ): Promise<EventEmitter> {
   const messages: ChatCompletionRequestMessage[] = [];
 
   if (session) {
-    session.addHistory(prompt, "user");
+    session.addHistory(message);
     messages.push.apply(messages, session.getHistory());
   } else {
     // If no session is provided, just use the prompt as the first message
-    messages.push({ role: "user", content: prompt });
+    messages.push(message);
   }
 
   const apiClient = useOpenAI(process.env.OPENAI_API_KEY ?? "");
+
+  const emitter = new EventEmitter();
+  let fullMessage = "";
+  let line = "";
+  let functionRequest = {
+    name: '',
+    arguments: '',
+  }
+
+  emitter.emit('reaction-add', 'hourglass')
   const resp = await apiClient.createChatCompletion(
     {
       model: process.env.OPENAI_MODEL ?? "gpt-3.5-turbo",
@@ -52,14 +62,11 @@ export async function chatCompletionStream(
         parseInt(process.env.OPENAI_MAX_TOKEN ?? "4037", 10) -
         (session?.promptTokens ?? 1024),
       frequency_penalty: 0.2,
+      ...session?.getFunctionsParams(),
       stream: true,
     },
     { responseType: "stream", headers: { accept: "text/event-stream" } }
   );
-
-  const emitter = new EventEmitter();
-  let fullMessage = "";
-  let line = "";
 
   (resp.data as any as NodeJS.ReadableStream).on(
     "data",
@@ -77,6 +84,14 @@ export async function chatCompletionStream(
           const parsed = JSON.parse(message);
           const partialMessage = parsed.choices[0].delta.content ?? "";
           fullMessage += partialMessage;
+          if (parsed.choices[0].delta.function_call) {
+            if (parsed.choices[0].delta.function_call["name"]) {
+              functionRequest.name = parsed.choices[0].delta.function_call["name"];
+            }
+            if (parsed.choices[0].delta.function_call["arguments"]) {
+              functionRequest.arguments += parsed.choices[0].delta.function_call["arguments"];
+            }
+          }
           line += partialMessage;
           if (line.includes("\n")) {
             const lines = line.split("\n");
@@ -91,8 +106,40 @@ export async function chatCompletionStream(
               emitter.emit("line", `${line_}\n`);
             });
           }
+
+          if (parsed["finish_reason"] === "stop") {
+            emitter.emit('end', fullMessage)
+          }
+
+          // TODO: function-call 로 끝난 경우 여기서 추가 처리 필요
+          if (parsed.choices[0]["finish_reason"] === "function_call") {
+            emitter.emit('reaction-add', 'jigsaw')
+            // invoke the function
+            if (functionRequest.name !== null) {
+              console.info(`>>> ${functionRequest.name}(${functionRequest.arguments})`);
+              const callResultMessage = await invokeFunction(
+                functionRequest.name,
+                JSON.parse(functionRequest.arguments)
+              )
+              console.info(callResultMessage.content)
+              line = ''
+              await chatCompletionStream(
+                callResultMessage,
+                streamHandler,
+                session
+              ).catch(async (e) => {
+                await streamHandler(`함수 실행중 오류가 발생했습니다. ${e}\n`);
+                emitter.emit('reaction-add', 'x')
+              })
+            }
+          }
+
         } catch (error) {
-          console.error("Could not JSON parse stream message", message, error);
+          console.error("Error", error);
+          emitter.emit('reaction-add', 'x')
+        } finally {
+          emitter.emit('reaction-remove', 'hourglass')
+          emitter.emit('reaction-remove', 'jigsaw')
         }
       }
     }
@@ -104,7 +151,10 @@ export async function chatCompletionStream(
       streamHandler(line);
       emitter.emit("line", line);
     }
-    emitter.emit("end", fullMessage);
+    if (fullMessage.length > 0) {
+      session?.addHistory({role: 'assistant', content: fullMessage});
+    }
+    // emitter.emit("end", fullMessage);
   });
 
   return emitter;

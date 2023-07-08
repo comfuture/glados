@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
     "build": "tsup-node",
     "dev": "tsx src/app.ts",
     "preserve": "yarn build",
@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sinclair/typebox": "^0.29.4",
     "@slack/bolt": "^3.13.1",
     "gpt3-tokenizer": "^1.1.5",
     "openai": "^3.3.0",
@@ -21,10 +22,12 @@
   },
   "devDependencies": {
     "@pinecone-database/pinecone": "^0.1.6",
+    "@types/json-schema": "^7.0.12",
     "@types/shell-quote": "^1.7.1",
     "dotenv": "^16.0.3",
     "tsup": "^7.1.0",
     "tsx": "^3.12.7",
-    "typescript": "^5.1.6"
+    "typescript": "^5.1.6",
+    "vitest": "^0.32.2"
   }
 }

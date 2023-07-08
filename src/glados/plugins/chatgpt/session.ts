@@ -1,10 +1,12 @@
 import type {
   ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum,
+  ChatCompletionResponseMessage,
 } from "openai";
 
 import GPT3Tokenizer from "gpt3-tokenizer";
 import { channelTypes } from "@slack/bolt/dist/types/events/message-events";
+import { FunctionDefinition } from "./functions";
 
 const tokenizer = new GPT3Tokenizer({ type: "gpt3" });
 
@@ -14,7 +16,7 @@ const BOT_TOKEN_LEN = tokenizer.encode("<assistant>").bpe.length;
 
 const BOT_CHARACTER: ChatCompletionRequestMessage = {
   role: "system",
-  content: "Try to be nice.",
+  content: "Try to be nice. USE Korean as possible",
 };
 
 const { bpe } = tokenizer.encode(`<system> ${BOT_CHARACTER.content}`);
@@ -25,6 +27,7 @@ export class ChatSession {
   private ttl: number = 60 * 5 * 1000; // 5분
   private lastAccessTime: number = Date.now();
   private history: [number, ChatCompletionRequestMessage][];
+  private functions: FunctionDefinition[] = [];
   private _user?: string;
   private _channel?: string;
   private _type: channelTypes = "channel";
@@ -54,14 +57,13 @@ export class ChatSession {
    * @returns 현재 히스토리의 총 토큰수
    */
   public addHistory(
-    content: string,
-    role: ChatCompletionRequestMessageRoleEnum = "user"
+    message: ChatCompletionRequestMessage | ChatCompletionResponseMessage,
   ): number {
-    const { bpe } = tokenizer.encode(content);
+    const { bpe } = tokenizer.encode(message.content ?? '');
     const tokenSize =
-      bpe.length + (role === "user" ? USER_TOKEN_LEN : BOT_TOKEN_LEN);
+      bpe.length + (message.role === "user" ? USER_TOKEN_LEN : BOT_TOKEN_LEN);
 
-    this.history.push([tokenSize, { role, content }]);
+    this.history.push([tokenSize, message]);
 
     // 총 토큰수가 maxToken - 1024를 넘으면 히스토리를 앞에서부터 제거한다.
     // TODO: 제거하지 말고 요약해서 앞에 추가하면 더 좋음. 그런데 비용이 발생하고 느려짐.
@@ -81,6 +83,18 @@ export class ChatSession {
 
   public clearHistory() {
     this.history = [];
+  }
+
+  public useFunctions(functions: FunctionDefinition[] = []) {
+    this.functions.splice(0, 99, ...functions);
+  }
+
+  public getFunctionsParams() {
+    if (this.functions?.length === 0) return {}
+    return {
+      functions: this.functions,
+      function_call: "auto",
+    }
   }
 
   /** 대화가 {ttl}이상 정체되어 있으면 종료되었다고 가정합니다.

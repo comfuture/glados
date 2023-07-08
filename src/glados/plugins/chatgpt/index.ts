@@ -1,19 +1,21 @@
+import https from 'node:https';
+import fs from 'node:fs';
+
 import {
   App,
   GenericMessageEvent,
   FileShareMessageEvent,
   SayArguments,
 } from "@slack/bolt";
-import { Block, KnownBlock } from "@slack/types";
 import { definePlugin } from "../..";
 
-import type { ChatCompletionRequestMessage } from "openai";
 import openai from "../../utils/openai";
 
-import { Actions, Button, Markdown, Section, Text } from "../../blocks";
 import { SessionManager } from "./session";
 import { chatCompletionStream, createCompletionHandler } from "./handlers";
-import { ClientRequest } from "http";
+import { parseFunction } from './functions';
+import './functions/dice'
+// import './functions/echo'
 
 /** test if message is a direct message or a channel message */
 function isGenericMessageEvent(message: any): message is GenericMessageEvent {
@@ -55,6 +57,20 @@ const setup = (app: App) => {
   });
 
   app.message(async ({ message, say, client, context }) => {
+    if (isAudioMessageEvent(message)) {
+      message.files?.forEach(async (file) => {
+        https.request(file.url_private!, {
+          headers: {
+            authorization: `Bearer ${context.botToken}`,
+          }
+        }, (res) => {
+          // pipe to bytearray
+          res.pipe(fs.createWriteStream('test.wav'));
+        });
+      })
+      message.text = "asdfasdf";
+    }
+
     if (!isGenericMessageEvent(message)) {
       return;
     }
@@ -89,8 +105,30 @@ const setup = (app: App) => {
     if (!content) {
       // 오디오 첨부파일이 있는 경우
       if (isAudioMessageEvent(message)) {
+        // get audio file
+        message.files.forEach(async (file) => {
+          // download file
+          https.request(file.url_private, {
+            headers: {
+              authorization: `Bearer ${context.botToken}`,
+            }
+          }, (res) => {
+            // pipe to bytearray
+            res.pipe(fs.createWriteStream('test.wav'));
+          });
+        })
+        // const audioFile = await client.files.
         // TODO: whisper로 stt 한다음 content에 넣는다.
         // console.info("audio attached!", message.files?[0]);
+      }
+      return;
+    }
+
+    // ---- 로 시작하고 다른 내용이 없는 경우 => 세션 초기화
+    if (/^-{4,}$/.test(content)) {
+      if (SessionManager.hasActiveSession(message.user, message.channel)) {
+        SessionManager.clearSession(message.user, message.channel);
+        await say("대화 세션이 초기화되었습니다.");
       }
       return;
     }
@@ -107,17 +145,6 @@ const setup = (app: App) => {
       }
     }
 
-    // 메시지에 모래시계 이모티콘 붙이기
-    app.client.reactions
-      .add({
-        name: "hourglass",
-        channel: message.channel,
-        timestamp: message.ts,
-      })
-      .catch((e) => {
-        console.error(e);
-      });
-
     const session = SessionManager.getSession(
       message.channel_type,
       message.user,
@@ -131,43 +158,38 @@ const setup = (app: App) => {
       thread_ts: message.thread_ts,
     });
 
+    const functions = parseFunction(message.text ?? '')
+    if (functions.length > 0) {
+      session.useFunctions(functions)
+    }
+
     const chatCompletion = await chatCompletionStream(
-      message.text ?? "",
+      { role: 'user', content: message.text ?? "" },
       handler,
       session
-    ).catch(async () => {
-      await app.client.reactions
+    );
+
+    chatCompletion?.on('reaction-add', async (icon: string) => {
+      app.client.reactions
         .add({
-          name: "x",
+          name: icon,
           channel: message.channel,
           timestamp: message.ts,
         })
         .catch((e) => {
-          console.error(e);
+          // console.error(e);
         });
-      await app.client.reactions
+    })
+
+    chatCompletion?.on('reaction-remove', async (icon: string) => {
+      app.client.reactions
         .remove({
-          name: "hourglass",
+          name: icon,
           channel: message.channel,
           timestamp: message.ts,
         })
         .catch((e) => {
-          console.error(e);
-        });
-    });
-
-    chatCompletion?.on("end", async (resp: string) => {
-      session.addHistory(resp, "assistant");
-
-      // 메시지에서 모래시계 이모티콘 제거
-      await app.client.reactions
-        .remove({
-          name: "hourglass",
-          channel: message.channel,
-          timestamp: message.ts,
-        })
-        .catch((e) => {
-          console.error(e);
+          // console.error(e);
         });
     });
   });
@@ -187,12 +209,6 @@ const setup = (app: App) => {
           event.channel
         );
 
-        app.client.reactions.add({
-          name: "ok_hand",
-          channel: event.channel,
-          timestamp: event.ts,
-        });
-
         // 스레드의 첫 글을 사용자가 발화한 것으로 간주하여 대화 시작
         // 언급에 추가 메시지가 있는 경우에는 그 메시지도 사용자 발화로 간주
         // let prompt = thread.messages![0].text!;
@@ -208,21 +224,16 @@ const setup = (app: App) => {
         });
 
         const chatCompletion = await chatCompletionStream(
-          event.text,
+          { role: 'user', content: event.text },
           handler,
           session
         );
 
         chatCompletion.on("end", async (resp: string) => {
           console.log("stream end", resp);
-          session.addHistory(resp, "assistant");
-
-          // 메시지에서 모래시계 이모티콘 제거
-          await app.client.reactions.remove({
-            name: "ok_hand",
-            channel: event.channel,
-            timestamp: event.ts,
-          });
+          if (resp !== '') {
+            session.addHistory({ role: 'assistant', content: resp });
+          }
         });
       }
     } else {
