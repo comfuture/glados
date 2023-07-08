@@ -78,6 +78,8 @@ export async function chatCompletionStream(
       for (const packet of packets) {
         const message = packet.replace(/^data: /, "");
         if (message === "[DONE]") {
+          emitter.emit('reaction-remove', 'hourglass')
+          emitter.emit('reaction-remove', 'jigsaw')
           continue; // Stream finished
         }
         try {
@@ -137,9 +139,6 @@ export async function chatCompletionStream(
         } catch (error) {
           console.error("Error", error);
           emitter.emit('reaction-add', 'x')
-        } finally {
-          emitter.emit('reaction-remove', 'hourglass')
-          emitter.emit('reaction-remove', 'jigsaw')
         }
       }
     }
