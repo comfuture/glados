@@ -1,6 +1,5 @@
 import "./ensure_env";
 import { ChatCompletionRequestMessage, Configuration, OpenAIApi } from "openai";
-import { ReadableStream } from "stream/web";
 import { EventEmitter } from "stream";
 import { ChatSession } from "../plugins/chatgpt/session";
 
@@ -110,4 +109,7 @@ export async function chatCompletionStream(
   return emitter;
 }
 
+/**
+ * OpenAI API 클라이언트를 생성합니다.
+ */
 export default useOpenAI(process.env.OPENAI_API_KEY ?? "");
