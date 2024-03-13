@@ -19,8 +19,13 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
-      - name: create remote docker context
-        run: docker context create remote --docker "host=${{ secrets.DOCKER_HOST }}"
+      - name: create remote context
+        uses: arwynfr/actions-docker-context@v2
+        with:
+          docker_host: ${{ secrets.DOCKER_HOST }}
+          context_name: remote
+          ssh_key: ${{ secrets.SSH_KEY }}
+
       - name: login to ghcr.io
         uses: docker/login-action@v3
         with:
