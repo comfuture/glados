@@ -41,7 +41,9 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:latest
           context: .
           file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
+          outputs: type=image,name=target,annotation-index.org.opencontainers.image.description=Glados multi-arch image
       - name: debug
         run: docker context ls
       - name: deploy to remote
