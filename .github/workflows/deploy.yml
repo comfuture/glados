@@ -27,12 +27,12 @@ jobs:
       - name: build and push
         uses: docker/build-push-action@v5.2.0
         with:
-          tags: ghcr.io/${{ github.repository }}/${{ github.sha}}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha}}
           context: .
           file: ./Dockerfile
           push: true
       - name: deploy to remote
         run: |
-          echo $GITHUB_TOKEN | docker --context remote login ghcr.io -u $GITHUB_ACTOR --password-stdin
+          echo ${{ secrets.GITHUB_TOKEN }} | docker --context remote login ghcr.io -u $GITHUB_ACTOR --password-stdin
           docker --context remote pull ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
           docker --context remote compose up -d --force-recreate
