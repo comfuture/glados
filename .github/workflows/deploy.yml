@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-    - main
+      - main
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,27 +11,18 @@ jobs:
       SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-      OPENAI_MAX_TOKEN: ${{ secrets.OPENAI_MAX_TOKEN }}
     steps:
-    - uses: actions/checkout@v3
-    - uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_KEY }}
-    - name: make env file
-      run: |
-        echo SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN >> .env
-        echo SLACK_APP_TOKEN=$SLACK_APP_TOKEN >> .env
-        echo SLACK_SIGNING_SECRET=$SLACK_SIGNING_SECRET >> .env
-        echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
-        echo OPENAI_MODEL=$OPENAI_MODEL >> .env
-        echo OPENAI_MAX_TOKEN=$OPENAI_MAX_TOKEN >> .env
-    - name: send files to server
-      run: |
-        sh -c "rsync -avzO --delete --exclude=__pycache__ --exclude=node_modules \
-           -e 'ssh -o StrictHostKeyChecking=no' . ubuntu@glados.changkyun.kim:service/glados"
-    - name: install dependencies
-      run: |
-        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c ". ~/.nvm/nvm.sh && cd service/glados && yarn"'
-    - name: restart service
-      run: |
-        ssh -o StrictHostKeyChecking=no -A -tt ubuntu@glados.changkyun.kim 'bash -l -c "sudo systemctl restart glados.service"'
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+      - name: create remote docker context
+        run: docker context create remote ‐‐docker "host=${{ secrets.DOCKER_HOST }}"
+      - name: login to gchr.io
+        run: echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+      - name: build and push
+        run: |
+          docker build -t ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA .
+          docker push ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
+      - name: deploy to remote
+        run: docker --context remote compose up -d --force-recreate
