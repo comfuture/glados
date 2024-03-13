@@ -18,8 +18,8 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_KEY }}
       - name: create remote docker context
         run: docker context create remote --docker "host=${{ secrets.DOCKER_HOST }}"
-      - name: login to gchr.io
-        run: echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+      # - name: login to gchr.io
+      #   run: echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
       - name: build and push
         run: |
           docker build -t ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA .
