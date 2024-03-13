@@ -25,7 +25,7 @@ jobs:
           docker_host: ${{ secrets.DOCKER_HOST }}
           context_name: remote
           ssh_key: ${{ secrets.SSH_KEY }}
-      - name: strict host key checking
+      - name: skip strict host key checking
         run: |
           echo "Host *" >> ~/.ssh/config
           echo "  StrictHostKeyChecking no" >> ~/.ssh/config

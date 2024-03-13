@@ -1,0 +1,6 @@
+version: "3.8"
+
+services:
+  glados:
+    image: ghcr.io/comfuture/glados:latest
+    restart: always
