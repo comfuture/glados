@@ -5,26 +5,41 @@ __all__ = ["MrkDwn", "MarkDown", "SourceCode", "Context", "Image"]
 
 
 def MrkDwn(text: str) -> dict:
+    text = re.sub(r"(\#+) (.*)", r"*\2*", text)
+    text = re.sub(r"(\s*)\* (.*)\n", r"\1- \2\n", text)
+    # text = re.sub(r"(https://[^\s^\)]+)", r"[\1](\1)", text)
+    text = re.sub(r"\[(.*)\]\((.*)\)", r"<\2|\1>", text)
+
     return {"type": "mrkdwn", "text": text}
 
 
 def MarkDown(text: str) -> dict:
     """Format as markdown block."""
-    heading = re.match(r"^(#+) (\s+)", text)
-    listitem = re.match(r"^(\d+\. |\s*(-\*) )(\s+)", text)
-    if heading:
-        text = f"*{heading.group(2)}*"
-    elif listitem:
-        text = f"- {listitem.group(3)}"
+    # TODO: format using new rich_text block
     return {
         "type": "section",
         "text": MrkDwn(text),
     }
 
 
+def Header(text: str) -> dict:
+    return {
+        "type": "header",
+        "text": {"type": "plain_text", "text": text, "emoji": True},
+    }
+
+
 def SourceCode(text: str) -> dict:
     """Format as source code block."""
-    return MarkDown(f"```\n{text}```")
+    return {
+        "type": "rich_text",
+        "elements": [
+            {
+                "type": "rich_text_preformatted",
+                "elements": [{"type": "text", "text": text}],
+            },
+        ],
+    }
 
 
 def Context(text: str) -> dict:

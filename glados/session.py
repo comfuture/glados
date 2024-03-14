@@ -2,7 +2,6 @@ import json
 import asyncio
 from typing import Optional
 from queue import Queue
-from threading import Thread
 from datetime import datetime, timezone
 from .util.langchain import count_tokens
 from .backend.db import use_db
