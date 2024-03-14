@@ -1,8 +1,8 @@
 from datetime import datetime
+from glados.tool import plugin
 
-__all__ = ("get_date",)
 
-
+@plugin(name="System Date", icon="📅")
 async def get_date() -> str:
     """returns current date"""
     return datetime.now().isoformat()
