@@ -54,19 +54,7 @@ class GLaDOS:
         else:
             session = Session()
 
-        # change model and content based on image_url existence in message
         session.model = os.environ.get("OPENAI_MODEL", "gpt-4-turbo-preview")
-        # if message is not None and image_urls and len(image_urls) > 0:
-        # session.model = "gpt-4-vision-preview"
-        # content = [
-        #     {"type": "text", "text": message},
-        #     *(
-        #         {"type": "image_url", "image_url": image_url}
-        #         for image_url in image_urls
-        #     ),
-        # ]
-        # messages = session(content)
-        # messages = session(f"{message}\n{'\\n'.join(image_urls)}")
         if message:
             if image_urls and len(image_urls) > 0:
                 context = "\n".join(f"- {image_url}" for image_url in image_urls)
@@ -79,11 +67,6 @@ class GLaDOS:
 
             # if tools is not provided, choose tools from the message
             tools = await choose_tools(message)
-
-        # if message contains image_url in recent messages, change model to vision model
-        # XXX
-        # if list(filter(lambda m: isinstance(m.get("content"), list), messages)):
-        #     session.model = "gpt-4-vision-preview"
 
         async def gen_answer():
             """Generate the assistant's answer.

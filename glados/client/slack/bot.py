@@ -9,7 +9,7 @@ from slack_bolt.async_app import AsyncApp
 
 from ...assistant import GLaDOS, EventType, AssistantResponse
 from ...util import is_image_url, make_public_url
-from .formatter import block as b
+from .formatter import block as b, format_response
 
 
 class SlackBot(AsyncApp):
@@ -63,113 +63,35 @@ async def stream_to_transport(
     thread_ts: str | None = None,
 ):
     """Stream the response to the bot transport."""
-    block_type = "-"
-    block_ts: int | None = None
+    block_ts: str | None = None
     block_content = ""
-
-    # TODO: make source to async generator if the type is str
 
     async for line in source:
         if isinstance(line, dict):
-            message = cast(AssistantResponse, line)
-            icon = ":information_source:"
-            if message["event"] == EventType.FUNCTION_CALLING:
-                icon = ":hammer_and_wrench:"
-            # if line is a dict, it is an event
             await send_func(
-                blocks=[b.Context(f"{icon} Using {message['content']}")],
-                text=f"* Using {message['content']}",
+                blocks=[b.Context(f":information_source: Using {line['content']}")],
+                text=f"* Using {line['content']}",
                 thread_ts=thread_ts,
             )
+            block_ts = None
+            block_content = ""
             continue
-        if not line.strip():  # skip empty lines
-            continue
-
-        if line.startswith("```"):  # source code block start or end
-            if block_type == "sourcecode":  # end
-                # send entire block and quit mode
-                await app.client.chat_update(
-                    channel=channel,
-                    text=block_content,
-                    blocks=[b.SourceCode(block_content)],
-                    thread_ts=thread_ts,
-                    ts=block_ts,
-                )
-                block_ts = None
-                block_type = "mrkdwn"
-                continue
-            else:  # start
-                r = await send_func(
-                    text=line,
-                    blocks=[b.SourceCode("...")],
-                    thread_ts=thread_ts,
-                )
-                block_ts = r.get("ts")
-                block_type = "sourcecode"
-                block_content = ""  # reset block content
-                continue
-        # elif line.startswith("> "):  # quote block
-        #     if block_type != "quote":
-        #         r = await send_func(
-        #             text=line,
-        #             blocks=[b.MarkDown(line)],
-        #             thread_ts=thread_ts,
-        #         )
-        #         block_type = "quote"
-        #         block_ts = r.get("ts")
-        #         block_content = line + "\n"
-        #         continue
-        # elif re.match(r"^\d+\. |\s*(-\*) ", line):
-        #     if block_type not in ("list",):
-        #         r = await send_func(
-        #             text=line,
-        #             blocks=[b.MarkDown(line)],
-        #             thread_ts=thread_ts,
-        #         )
-        #         block_type = "list"
-        #         block_ts = r.get("ts")
-        #         block_content = line + "\n"
-        #         continue
-        elif (
-            block_type == "sourcecode"
-        ):  # if recent block type is source code, just extend it
-            block_content += line + "\n"
-            line = ""
-            continue
-        elif block_type not in ("sourcecode", "mrkdwn"):
-            block_type = "mrkdwn"
+        block_content += line + "\n"
+        if not block_ts:
             r = await send_func(
-                text=line,
-                blocks=[b.MarkDown(line + "\n")],
+                text=block_content,
+                blocks=list(format_response(line)),
                 thread_ts=thread_ts,
             )
             block_ts = r.get("ts")
-
-        if block_ts is not None:  # in a block content
-            block_content += line + "\n"
-            if block_type == "sourcecode":
-                await app.client.chat_update(
-                    channel=channel,
-                    ts=block_ts,
-                    thread_ts=thread_ts,
-                    text=block_content,
-                    blocks=[b.SourceCode(block_content)],
-                )
-            else:
-                await app.client.chat_update(
-                    channel=channel,
-                    ts=block_ts,
-                    thread_ts=thread_ts,
-                    text=block_content,
-                    blocks=[b.MarkDown(block_content)],
-                )
         else:
-            r = await send_func(
-                blocks=[b.MarkDown(line)],
-                text=line,
+            await app.client.chat_update(
+                channel=channel,
+                ts=block_ts,
                 thread_ts=thread_ts,
-            )  # send a markdown block
-            block_ts = r.get("ts")
+                text=block_content,
+                blocks=list(format_response(block_content)),
+            )
 
 
 @app.event("app_mention")
@@ -216,6 +138,12 @@ async def handle_message_events(ack, body, event, say, context):
     if "files" in event:
         for file in event["files"]:
             if file.get("mimetype", "").startswith("image/"):
+                await say(
+                    blocks=[
+                        b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")
+                    ],
+                    thread_ts=None if is_direct_message else session_id,
+                )
                 response = requests.get(
                     file["url_private"],
                     headers={"Authorization": f"Bearer {app.client.token}"},
@@ -224,12 +152,6 @@ async def handle_message_events(ack, body, event, say, context):
                     BytesIO(response.content), ext=file["filetype"]
                 )
                 image_urls.append(image_url)
-                await say(
-                    blocks=[
-                        b.Context(":frame_with_picture: 이미지를 처리 중입니다...")
-                    ],
-                    thread_ts=None if is_direct_message else session_id,
-                )
             if file.get("mimetype", "").startswith("audio/"):
                 response = requests.get(
                     file["url_private_download"],
@@ -260,7 +182,9 @@ async def handle_message_events(ack, body, event, say, context):
         image_url = inline_url.group(1)
         image_urls.append(image_url)
         prompt = re.sub(re.compile(rf"<?{re.escape(image_url)}([^>*]>?), "), prompt)
-        await say(blocks=[b.Context(":frame_with_picture: 이미지를 처리 중입니다...")])
+        await say(
+            blocks=[b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")]
+        )
 
     print(f"<@{event['user']}> {prompt}")
 
