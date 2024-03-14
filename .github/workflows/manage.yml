@@ -1,5 +1,15 @@
+name: manage
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        default: start
+        type: choice
+        options:
+          - start
+          - stop
 
 jobs:
   stop_container:
@@ -16,5 +26,9 @@ jobs:
         run: |
           echo "Host *" >> ~/.ssh/config
           echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+      - name: start container
+        if: ${{ github.event.inputs.action == 'start' }}
+        run: docker --context remote compose up -d
       - name: stop container
+        if: ${{ github.event.inputs.action == 'stop' }}
         run: docker --context remote compose down
