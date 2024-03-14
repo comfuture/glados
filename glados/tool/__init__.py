@@ -3,33 +3,40 @@ import glob
 import importlib.util
 import inspect
 import json
-from typing import Optional
+from typing import Optional, TypedDict, Callable
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from function_schema import get_function_schema
 from ..assistant import OpenAI
 from ..session import Session
 
+__registry__ = {}
 
-def plugin(fn, meta: Optional[dict] = {}):
-    async def wrapper(*args, **kwargs):
-        if inspect.iscoroutinefunction(fn):
-            ret = await fn(**kwargs)
-        else:
-            ret = fn(**kwargs)
-        return ret
 
-    wrapper.__glados_plugin__ = True
-    wrapper.__name__ = fn.__name__
-    wrapper.__doc__ = fn.__doc__
-    wrapper.__annotations__ = fn.__annotations__
-    # wrapper.__defaults__ = getattr(fn, "__defaults__", None)
-    # wrapper.__kwdefaults__ = getattr(fn, "__kwdefaults__", None)
-    wrapper.__meta__ = meta
-    return wrapper
+class PluginMeta(TypedDict):
+    name: Optional[str]
+    icon: Optional[str]
+
+
+def plugin(fn: Optional[Callable] = None, **meta: PluginMeta):
+    """Decorator to mark a function as a plugin."""
+
+    if not fn or not callable(fn):
+        return lambda fn: plugin(fn, **meta)
+
+    fn.__glados_plugin__ = True
+    fn.__meta__ = meta
+
+    __registry__[fn.__name__] = {
+        "function": fn,
+        "meta": meta,
+        "schema": get_function_schema(fn),
+    }
+    print(f"register tool {fn.__name__} {fn.__meta__=}")
+
+    return fn
 
 
 # Load all tools
-all_tools = {}
 current_dir = os.path.dirname(os.path.realpath(__file__))
 py_files = glob.glob(os.path.join(current_dir, "*.py"))
 
@@ -50,17 +57,6 @@ for py_file in py_files:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    # Get all functions in the module
-    functions = inspect.getmembers(module, inspect.isfunction)
-
-    # Add the functions to the all_tools dictionary
-    for function_name, function in functions:
-        all_tools[function_name] = {
-            "schema": get_function_schema(function),
-            "function": function,
-        }
-print(f"Loaded tools {all_tools=}")
-
 
 async def noop(**kwargs):
     """Do nothing."""
@@ -73,7 +69,7 @@ async def invoke_function(function_name: str, **kwargs):
     even if the function is not found, it should not raise an error, but return a message that the function is not found.
     if the function is corountine, it automatically awaits it.
     """
-    tool = all_tools.get(function_name, {"function": noop})
+    tool = __registry__.get(function_name, {"function": noop})
     if inspect.iscoroutinefunction(tool["function"]):
         ret = await tool["function"](**kwargs)
     else:
@@ -120,7 +116,7 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
     if len(tool_names) == 0:
         return None
     return [
-        {"type": "function", "function": all_tools.get(tool_name)["schema"]}
+        {"type": "function", "function": __registry__.get(tool_name)["schema"]}
         for tool_name in tool_names
     ]
 
@@ -131,7 +127,7 @@ async def choose_tools(message: str) -> list[dict] | None:
     tool_names = "\n".join(
         [
             f"- {tool_name}: {impl['schema'].get('description', tool_name)}"
-            for tool_name, impl in all_tools.items()
+            for tool_name, impl in __registry__.items()
         ]
     )
 

@@ -5,6 +5,7 @@ from base64 import b64decode
 from openai import OpenAI
 from glados.util import make_public_url
 from glados.session import Session
+from glados.tool import plugin
 
 __all__ = (
     "process_image",
@@ -12,6 +13,7 @@ __all__ = (
 )
 
 
+@plugin(name="Vision", icon="👁️")
 async def process_image(
     image_url: Annotated[str, "The public URL of the image."],
     prompt: Annotated[
@@ -47,6 +49,7 @@ async def process_image(
         return {"error": str(e)}
 
 
+@plugin(name="Dall-e", icon="🎨")
 async def draw_image(
     prompt: Annotated[
         str,
