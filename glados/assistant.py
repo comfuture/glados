@@ -2,10 +2,14 @@ import os
 import asyncio
 from typing import Optional, AsyncGenerator
 from enum import Enum
-from openai import OpenAI
+from openai import (
+    OpenAI,
+    AsyncAssistantEventHandler,
+    AsyncOpenAI,
+)
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from .session import SessionManager, Session
-from .tool import invoke_tool_calls, choose_tools
+from .tool import invoke_tool_calls, choose_tools, context
 from typing import TypedDict
 
 
@@ -19,9 +23,10 @@ class AssistantResponse(TypedDict):
     content: str | None
 
 
-class GLaDOS:
+class GLaDOSv1:
     def __init__(self):
         self.client = OpenAI()
+        self.client = AsyncOpenAI()
         self.session = None
 
     def resume_session(self, session_id: str):
@@ -54,12 +59,13 @@ class GLaDOS:
         else:
             session = Session()
 
+        SessionManager.current = session
         session.model = os.environ.get("OPENAI_MODEL", "gpt-4-turbo-preview")
         if message:
             if image_urls and len(image_urls) > 0:
-                context = "\n".join(f"- {image_url}" for image_url in image_urls)
+                urls = "\n".join(f"- {image_url}" for image_url in image_urls)
                 session(
-                    f"{message}\n\nPlease response with refer to the image urls.\nImage URL:\n{context}"
+                    f"{message}\n\nPlease response with refer to the image urls.\nImage URL:\n{urls}"
                 )
                 # if message is provided, determine whether to use tools or not
             else:
@@ -117,6 +123,7 @@ class GLaDOS:
                     )
 
                     # call tools and append the result to session
+                    context.set(session)
                     calls = await invoke_tool_calls(tool_calls)
                     for tool_message in calls:
                         session(tool_message)
@@ -139,3 +146,64 @@ class GLaDOS:
         for line in source.split("\n"):
             delay = len(line) * 0.02
             yield asyncio.sleep(delay, line)
+
+
+class GLaDOS:
+    """An alternative assistant that uses the beta assistant API."""
+
+    def __init__(self):
+        self.client = AsyncOpenAI()
+        self.assistant_id = os.environ.get("GLADOS_ASSISTANT_ID")
+
+    async def chat(
+        self,
+        message: str,
+        *,
+        handler: AsyncAssistantEventHandler,
+        session_id: str,
+        file_ids: Optional[list[str]] = None,
+        image_urls: Optional[list[str]] = None,
+        tools: Optional[list[str]] = [],
+    ) -> None:
+        """Try to chat with the assistant.
+
+        Args:
+            message (str): The message to send to the assistant.
+            handler (AsyncAssistantEventHandler): The event handler.
+            session_id (str): The ID of the session.
+            file_ids (list[str], optional): The list of file IDs to include in the conversation. Defaults to None.
+            image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
+            tools (list[str], optional): The list of tools to use. Defaults to [].
+        """
+        session = SessionManager.get_session(session_id)
+
+        functions = await choose_tools(message)
+        if functions:
+            tools.extend(functions)
+
+        if file_ids and len(file_ids) > 0:
+            # append {'type': 'interpreter'} to tools deduped
+            tools.append({"type": "interpreter"})
+
+        if (
+            not session.thread_id
+        ):  # if session.thread_id is not set, create a new thread
+            thread = await self.client.beta.threads.create()
+            session.thread_id = thread.id
+
+        if image_urls and len(image_urls) > 0:
+            urls = "\n".join(f"- {image_url}" for image_url in image_urls)
+            message = f"Image URLs:\n{urls}\n{message}"
+
+        session(message)
+        await self.client.beta.threads.messages.create(
+            thread_id=session.thread_id, role="user", content=message
+        )
+
+        async with self.client.beta.threads.runs.create_and_stream(
+            thread_id=session.thread_id,
+            assistant_id=self.assistant_id,
+            tools=tools,
+            event_handler=handler,
+        ) as stream:
+            await stream.until_done()

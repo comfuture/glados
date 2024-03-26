@@ -1,13 +1,24 @@
 import os
 import re
+import json
 import asyncio
 import tempfile
-from typing import Callable, Any, AsyncGenerator, cast
+from typing import Callable, Any, AsyncGenerator
+from typing_extensions import override
+import time
+from datetime import datetime
 from io import BytesIO
 import requests
+import pytz
 from slack_bolt.async_app import AsyncApp
 
-from ...assistant import GLaDOS, EventType, AssistantResponse
+from ...assistant import (
+    GLaDOS,
+    AssistantResponse,
+    AsyncAssistantEventHandler,
+)
+from ...tool import invoke_function, get_tool_meta
+from ...session import SessionManager, Session
 from ...util import is_image_url, make_public_url
 from .formatter import block as b, format_response
 
@@ -96,7 +107,7 @@ async def stream_to_transport(
 
 @app.event("app_mention")
 @app.event("message")
-async def handle_message_events(ack, body, event, say, context):
+async def handle_message_events(ack, client, body, event, say, context):
     """Handle a message."""
     await ack()
 
@@ -113,7 +124,6 @@ async def handle_message_events(ack, body, event, say, context):
     prompt = event.get("text", "")
 
     is_direct_message = event["channel_type"] == "im" or event["channel_type"] == "mpim"
-    # is_mentioned = f"<@{app.client.bot_user_id}>" in prompt
     is_mentioned = f"<@{app.bot_user_id}>" in prompt
 
     prompt = re.sub(
@@ -130,7 +140,6 @@ async def handle_message_events(ack, body, event, say, context):
 
     if not session_id:
         # if not in a thread, treat as a new conversation
-        print("no need to answer, quit")
         return
 
     image_urls = []
@@ -188,15 +197,151 @@ async def handle_message_events(ack, body, event, say, context):
 
     print(f"<@{event['user']}> {prompt}")
 
-    await stream_to_transport(
-        line_iterator(
-            assistant.chat(
-                prompt,
-                image_urls=image_urls,
-                session_id=session_id,
-            )
-        ),
-        say,
-        channel=event.get("channel"),
-        thread_ts=None if is_direct_message else session_id,
+    # fill current context
+    info = await client.users_info(user=event["user"])
+    session = SessionManager.get_session(session_id)
+    timezone = info["user"].get("tz", "UTC")
+    current_date = pytz.timezone(timezone).localize(datetime.fromtimestamp(time.time()))
+    session.context.set(
+        {
+            "platform": "slack",
+            "current_date": current_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "user": event["user"],
+            "display_name": info["user"].get("name", {}),
+            "timezone": timezone,
+            "channel": event["channel"],
+        }
     )
+
+    pipe = SlackTransport(
+        client, say, session=session, thread_ts=session_id, channel=event.get("channel")
+    )
+    await assistant.chat(
+        prompt,
+        handler=pipe,
+        image_urls=image_urls,
+        session_id=session_id,
+    )
+
+
+class SlackTransport(AsyncAssistantEventHandler):
+    """Assistant event handler for Slack."""
+
+    def __init__(
+        self,
+        client,
+        say,
+        *,
+        session: Session,
+        thread_ts: str = None,
+        message_ts: str = None,
+        channel: str = None,
+    ):
+        super().__init__()
+        self.client = client
+        self.say = say
+        self.session = session
+        self.thread_ts = thread_ts
+        self.message_ts = message_ts
+        self.channel = channel
+
+    def clone(self):
+        """Clone the current handler."""
+        return SlackTransport(
+            self.client,
+            self.say,
+            session=self.session,
+            thread_ts=self.thread_ts,
+            channel=self.channel,
+        )
+
+    @override
+    async def on_message_created(self, message):
+        """When a message is created, start a new message with the assistant's response."""
+        r = await self.say(
+            "`...`",
+            thread_ts=self.thread_ts,
+            blocks=[b.Context(":hourglass_flowing_sand: 대답을 기다리는 중...")],
+        )
+        self.message_ts = r.get("ts")
+
+    @override
+    async def on_message_delta(self, delta, snapshot):
+        content = delta.content[0]
+        if content.type == "text":
+            # flush every line if the delta contains newlines
+            if "\n" in delta.content[0].text.value:
+                to_say, _, remain = snapshot.content[0].text.value.rpartition("\n")
+                await self.client.chat_update(
+                    channel=self.channel,
+                    ts=self.message_ts,
+                    text=to_say,
+                    blocks=list(format_response(to_say)),
+                )
+        else:
+            print(f"implement this: {delta=}, {snapshot=}")
+
+    @override
+    async def on_message_done(self, message):
+        """Update the entire message with the response."""
+        # TODO: append action buttons block to the message
+        await self.client.chat_update(
+            channel=self.channel,
+            ts=self.message_ts,
+            text=message.content[0].text.value,
+            blocks=list(format_response(message.content[0].text.value)),
+        )
+
+    @override
+    async def on_image_file_done(self, image_file):
+        """When an image file created by the assistant, upload it to Slack and show it."""
+        # TODO: implement this properly
+        image_content = await assistant.client.files.retrieve_content(
+            image_file.file_id
+        )
+        new_file = await self.client.files_upload_v2(
+            title="Image file",
+            filename="image.png",
+            content=image_content,
+        )
+        file_url = new_file.get("file").get("permalink")
+        await self.say(
+            blocks=[b.Image(file_url, "Image file")],
+            thread_ts=self.thread_ts,
+        )
+
+    @override
+    async def on_tool_call_created(self, tool_call):
+        """When a tool call is created, show the tool call type and icon."""
+        # show tool call type and icon
+        if tool_call.type == "function":
+            # get icon
+            meta = get_tool_meta(tool_call.function.name)
+            await self.say(
+                blocks=[b.Context(f"Using {meta.get('icon')} {meta.get('name')}")],
+                thread_ts=self.thread_ts,
+            )
+
+    @override
+    async def on_run_step_created(self, run_step):
+        """Each time a run step is created, update the run ID."""
+        self.run_id = run_step.run_id
+
+    @override
+    async def on_tool_call_done(self, tool_call):
+        """When a tool call delta is done, inject the result to the conversation
+        and continue with the submitted tool outputs."""
+        if tool_call.type == "function":
+            kwargs = json.loads(tool_call.function.arguments)
+            result = await invoke_function(tool_call.function.name, **kwargs)
+            async with assistant.client.beta.threads.runs.submit_tool_outputs_stream(
+                run_id=self.run_id,
+                thread_id=self.session.thread_id,
+                tool_outputs=[{"tool_call_id": tool_call.id, "output": result}],
+                event_handler=self.clone(),
+            ) as stream:
+                await stream.until_done()
+
+        elif tool_call.type == "code_interpreter":
+            # TODO: implement this ?
+            ...
