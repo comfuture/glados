@@ -4,12 +4,14 @@ import importlib.util
 import inspect
 import json
 from typing import Optional, TypedDict, Callable
+from contextvars import ContextVar
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from function_schema import get_function_schema
-from ..assistant import OpenAI
+from ..assistant import AsyncOpenAI
 from ..session import Session
 
 __registry__ = {}
+context = ContextVar("session")
 
 
 class PluginMeta(TypedDict):
@@ -23,15 +25,12 @@ def plugin(fn: Optional[Callable] = None, **meta: PluginMeta):
     if not fn or not callable(fn):
         return lambda fn: plugin(fn, **meta)
 
-    fn.__glados_plugin__ = True
-    fn.__meta__ = meta
-
     __registry__[fn.__name__] = {
         "function": fn,
         "meta": meta,
         "schema": get_function_schema(fn),
     }
-    print(f"register tool {fn.__name__} {fn.__meta__=}")
+    print(f"Registerd tool {fn.__name__}")
 
     return fn
 
@@ -61,6 +60,13 @@ for py_file in py_files:
 async def noop(**kwargs):
     """Do nothing."""
     pass
+
+
+def get_tool_meta(tool_name: str) -> PluginMeta:
+    """Get the meta data of a tool."""
+    tool = __registry__.get(tool_name, {"meta": {"name": tool_name, "icon": "🔧"}})
+
+    return tool["meta"]
 
 
 async def invoke_function(function_name: str, **kwargs):
@@ -123,7 +129,7 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
 
 async def choose_tools(message: str) -> list[dict] | None:
     """automatically choose tools from a message."""
-    ai = OpenAI()
+    ai = AsyncOpenAI()
     tool_names = "\n".join(
         [
             f"- {tool_name}: {impl['schema'].get('description', tool_name)}"
@@ -143,7 +149,7 @@ async def choose_tools(message: str) -> list[dict] | None:
         "Please respond in JSON format using the following format:\n"
         """{"tools": ["tool1", "tool2", ...]}"""
     )
-    response = s.invoke(ai, response_format={"type": "json_object"})
+    response = await s.invoke_async(ai, response_format={"type": "json_object"})
     try:
         response_json = json.loads(response.choices[0].message.content)
         tool_names = response_json.get("tools", [])

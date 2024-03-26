@@ -2,6 +2,7 @@ import json
 import asyncio
 from typing import Optional
 from queue import Queue
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from .util.langchain import count_tokens
 from .backend.db import use_db
@@ -21,6 +22,8 @@ TOKENIZERS = {
     "gpt-4-vision-preview": "gpt4",
 }
 
+current_session = ContextVar("session")
+
 
 def random_session_id():
     return str(datetime.now(timezone.utc).timestamp())
@@ -33,12 +36,14 @@ class Session:
         *,
         model: str = "gpt-3.5-turbo",
         system_prompt: Optional[str] = None,
-        user: Optional[str] = None,
+        user: Optional[str] = "",
     ):
         self.id = session_id or random_session_id()
+        self.thread_id = None
         self.last_updated = datetime.now(timezone.utc)
         self.model = model
         self.user = user
+        self.context = ContextVar("runtime", default={})
         self.messages = []
         if system_prompt is not None:
             self(system_prompt, role="system")
@@ -86,6 +91,17 @@ class Session:
     def invoke(self, client, **kwargs):
         """invoke a chat"""
         return client.chat.completions.create(
+            model=self.model,
+            messages=self[...],
+            max_tokens=2000,
+            user=self.user,
+            **kwargs,
+        )
+
+    async def invoke_async(self, client, **kwargs):
+        """invoke a chat asynchronously"""
+        # should assert client is async client
+        return await client.chat.completions.create(
             model=self.model,
             messages=self[...],
             max_tokens=2000,
@@ -150,31 +166,17 @@ class SessionManager:
     queue = Queue()
     pid = None
 
-    def start(self):
-        loop = asyncio.get_event_loop()
-        try:
-            loop.run_until_complete(self.run())
-        finally:
-            loop.close()
+    @property
+    def current(self) -> Session:
+        return current_session.get()
 
-    async def run(self):
-        """run session manager"""
-        db = use_db()
-        while True:
-            colname, doc = self.queue.get()
-            col = db.get_collection(colname)
-            await col.insert_one(doc)
-            self.queue.task_done()
+    @current.setter
+    def current(self, session: Session):
+        current_session.set(session)
 
-    # @classmethod
-    # def get_instance(cls):
-    #     if cls.pid is None:
-    #         self.pid = Thread(target=self.start)
-    #         self.pid.start()
-
-    #         cls.pid = Thread(target=cls.run)
-    #         cls.pid.start()
-    #     return cls
+    @property
+    def context(self):
+        return SessionManager.current.context.get()
 
     @staticmethod
     async def save_session(self, session_id: str):
