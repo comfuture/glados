@@ -14,6 +14,18 @@ on:
 jobs:
   manage_container:
     runs-on: ubuntu-latest
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
+      SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      GLADOS_ASSISTANT_ID: ${{ secrets.GLADOS_ASSISTANT_ID }}
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+      PUBLIC_R2_BUCKET_URL: ${{ secrets.PUBLIC_R2_BUCKET_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: create remote context
@@ -29,18 +41,9 @@ jobs:
       - name: start container
         if: ${{ github.event.inputs.action == 'start' }}
         run: docker --context remote compose up -d
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
-          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-          GLADOS_ASSISTANT_ID: ${{ secrets.GLADOS_ASSISTANT_ID }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
-          CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
-          PUBLIC_R2_BUCKET_URL: ${{ secrets.PUBLIC_R2_BUCKET_URL }}
       - name: stop container
         if: ${{ github.event.inputs.action == 'stop' }}
         run: docker --context remote compose down
+      - name: restart container
+        if: ${{ github.event.inputs.action == 'restart' }}
+        run: docker --context remote compose restart
