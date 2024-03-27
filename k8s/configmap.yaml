@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipny-bot
+data:
+  OPENAI_MODEL: gpt-4-turbo
+  MONGODB_URI: mongodb://mongo:27017/ipny

@@ -13,12 +13,14 @@ spec:
         app: ipny-bot
     spec:
       containers:
-      - name: ipny-bot
-        image: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com/ipny-bot:$TAG
-        resources:
-          limits:
-            memory: "300Mi"
-            cpu: "500m"
-        envFrom:
-        - secretRef:
-            name: ipny-bot
+        - name: ipny-bot
+          image: 750384400573.dkr.ecr.ap-northeast-2.amazonaws.com/ipny-bot:$TAG
+          resources:
+            limits:
+              memory: "300Mi"
+              cpu: "500m"
+          envFrom:
+            - secretRef:
+                name: ipny-bot
+            - configMapRef:
+                name: ipny-bot
