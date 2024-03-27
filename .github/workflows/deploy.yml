@@ -36,7 +36,7 @@ jobs:
         sed -i 's@$SLACK_SIGNING_SECRET@${{ secrets.SLACK_SIGNING_SECRET }}@g' k8s/secret.yaml
         sed -i 's@$SLACK_APP_TOKEN@${{ secrets.SLACK_APP_TOKEN }}@g' k8s/secret.yaml
         sed -i 's@$OPENAI_API_KEY@${{ secrets.OPENAI_API_KEY }}@g' k8s/secret.yaml
-        sed -i 's@IPNY_ASSISTANT_ID@${{ secrets.IPNY_ASSISTANT_ID }}@g' k8s/secret.yaml
+        sed -i 's@$IPNY_ASSISTANT_ID@${{ secrets.IPNY_ASSISTANT_ID }}@g' k8s/secret.yaml
         export TAG=$(echo ${{ github.ref }} | cut -d '/' -f 3 )
         sed -i 's@$TAG@'$TAG'@g' k8s/deployment.yaml
     - name: kubectl apply k8s
