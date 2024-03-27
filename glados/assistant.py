@@ -8,6 +8,7 @@ from openai import (
     AsyncOpenAI,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from .backend.db import use_db
 from .session import SessionManager, Session
 from .tool import invoke_tool_calls, choose_tools, context
 from typing import TypedDict
@@ -28,10 +29,6 @@ class GLaDOSv1:
         self.client = OpenAI()
         self.client = AsyncOpenAI()
         self.session = None
-
-    def resume_session(self, session_id: str):
-        """Resume a session."""
-        self.session = SessionManager.get_session(session_id)
 
     async def chat(
         self,
@@ -55,7 +52,7 @@ class GLaDOSv1:
         """
 
         if session_id:
-            session = SessionManager.get_session(session_id)
+            session = await SessionManager.get_session(session_id)
         else:
             session = Session()
 
@@ -175,7 +172,8 @@ class GLaDOS:
             image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
             tools (list[str], optional): The list of tools to use. Defaults to [].
         """
-        session = SessionManager.get_session(session_id)
+        session = await SessionManager.get_session(session_id)
+        SessionManager.current = session
 
         functions = await choose_tools(message)
         if functions:
@@ -190,6 +188,12 @@ class GLaDOS:
         ):  # if session.thread_id is not set, create a new thread
             thread = await self.client.beta.threads.create()
             session.thread_id = thread.id
+            db = use_db()
+            col = db.get_collection("sessions")
+            await col.update_one(
+                {"session_id": session.id},
+                {"$set": {"thread_id": session.thread_id}},
+            )
 
         if image_urls and len(image_urls) > 0:
             urls = "\n".join(f"- {image_url}" for image_url in image_urls)

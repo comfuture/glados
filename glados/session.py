@@ -150,12 +150,22 @@ class Session:
         ...
 
     @classmethod
-    def from_snapshot(cls, snapshot: dict): ...
+    def from_snapshot(cls, snapshot: dict):
+        instance = cls(
+            session_id=snapshot["session_id"],
+            model=snapshot["model"],
+            user=snapshot["user"],
+        )
+        instance.thread_id = snapshot["thread_id"]
+        instance.last_updated = snapshot["last_updated"]
+        instance.messages = snapshot["messages"]
+        return instance
 
     def to_dict(self):
         """convert session to dict"""
         return {
             "session_id": self.id,
+            "thread_id": self.thread_id,
             "last_updated": self.last_updated.isoformat(),
             "model": self.model,
             "user": self.user,
@@ -169,7 +179,7 @@ class SessionManager:
     pid = None
 
     @classmethod
-    def get_current(self) -> Session:
+    def get_current(cls) -> Session:
         return current_session.get()
 
     @classmethod
@@ -200,7 +210,9 @@ class SessionManager:
         )
 
     @staticmethod
-    def get_session(session_id) -> Session:
+    async def get_session(
+        session_id, model="gpt-4-turbo", user: Optional[str] = None
+    ) -> Session:
         """Get a session. if not exists, create one."""
         # gabage collection if number of sessions exceeds 100 for saving memory
         if len(SessionManager.sessions) > 100:
@@ -214,14 +226,19 @@ class SessionManager:
                 SessionManager.clear_session(k)
 
         if session_id not in SessionManager.sessions:
-            SessionManager.sessions[session_id] = Session(session_id)
+            # try to retrieve session from snapshot
+            db = use_db()
+            col = db.get_collection("sessions")
+            snapshot = await col.find_one({"session_id": session_id})
+            if snapshot is not None:
+                SessionManager.sessions[session_id] = Session.from_snapshot(snapshot)
+            else:  # create a new session
+                SessionManager.sessions[session_id] = Session(
+                    session_id, model=model, user=user
+                )
+                await col.insert_one(SessionManager.sessions[session_id].to_dict())
 
         return SessionManager.sessions[session_id]
-
-    @staticmethod
-    def end_session(session_id):
-        """End a session and store snapshot."""
-        ...
 
     @staticmethod
     def resume_session(session_id, subject: str):
