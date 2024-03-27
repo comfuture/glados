@@ -121,10 +121,16 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
     """Format tool names as chat completion tools parameter."""
     if len(tool_names) == 0:
         return None
-    return [
-        {"type": "function", "function": __registry__.get(tool_name)["schema"]}
-        for tool_name in tool_names
-    ]
+
+    def get_tool(tool_name):
+        if tool_name == "code_interpreter":
+            return {"type": "code_interpreter"}
+        tool = __registry__.get(tool_name)
+        if tool is None:
+            return None
+        return {"type": "function", "function": tool["schema"]}
+
+    return [get_tool(tool_name) for tool_name in tool_names]
 
 
 async def choose_tools(message: str) -> list[dict] | None:
@@ -136,6 +142,7 @@ async def choose_tools(message: str) -> list[dict] | None:
             for tool_name, impl in __registry__.items()
         ]
     )
+    tool_names += "\n- code_interpreter: Create and run python code. also can process files, evaluate math expressions, etc."
 
     s = Session(model="gpt-3.5-turbo")
     s("Output JSON", role="system")

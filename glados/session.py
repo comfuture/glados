@@ -25,7 +25,8 @@ TOKENIZERS = {
 current_session = ContextVar("session")
 
 
-def random_session_id():
+def random_session_id() -> str:
+    """Generate a random session id"""
     return str(datetime.now(timezone.utc).timestamp())
 
 
@@ -38,8 +39,9 @@ class Session:
         system_prompt: Optional[str] = None,
         user: Optional[str] = "",
     ):
-        self.id = session_id or random_session_id()
-        self.thread_id = None
+        self.id: str = session_id or random_session_id()
+        self.thread_id: str = None
+        self.file_ids: list[str] = []
         self.last_updated = datetime.now(timezone.utc)
         self.model = model
         self.user = user
@@ -166,17 +168,15 @@ class SessionManager:
     queue = Queue()
     pid = None
 
-    @property
-    def current(self) -> Session:
+    @classmethod
+    def get_current(self) -> Session:
         return current_session.get()
 
-    @current.setter
-    def current(self, session: Session):
+    @classmethod
+    def set_current(cls, session: Session):
         current_session.set(session)
 
-    @property
-    def context(self):
-        return SessionManager.current.context.get()
+    current = property(get_current, set_current)
 
     @staticmethod
     async def save_session(self, session_id: str):
