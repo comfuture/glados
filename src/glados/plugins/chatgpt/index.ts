@@ -96,16 +96,16 @@ const setup = (app: App) => {
     }
 
     // 나쁜말 체크?
-    const moderationResult = await openai.createModeration({
-      input: content,
-    });
+    // const moderationResult = await openai.createModeration({
+    //   input: content,
+    // });
 
-    for (const check of moderationResult.data.results) {
-      if (Object.values(check.categories).some((v) => v)) {
-        await say("나쁜말 하지마세요");
-        return;
-      }
-    }
+    // for (const check of moderationResult.data.results) {
+    //   if (Object.values(check.categories).some((v) => v)) {
+    //     await say("나쁜말 하지마세요");
+    //     return;
+    //   }
+    // }
 
     // 메시지에 모래시계 이모티콘 붙이기
     app.client.reactions
