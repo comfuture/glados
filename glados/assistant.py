@@ -161,7 +161,7 @@ class GLaDOS:
         *,
         handler: AsyncAssistantEventHandler,
         session_id: str,
-        file_ids: Optional[list[str]] = None,
+        file_ids: Optional[list[str]] = [],
         image_urls: Optional[list[str]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
@@ -197,7 +197,7 @@ class GLaDOS:
 
         session(message)
         await self.client.beta.threads.messages.create(
-            thread_id=session.thread_id, role="user", content=message
+            thread_id=session.thread_id, role="user", content=message, file_ids=file_ids
         )
 
         async with self.client.beta.threads.runs.create_and_stream(

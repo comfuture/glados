@@ -12,6 +12,16 @@ import requests
 import pytz
 from slack_bolt.async_app import AsyncApp
 
+from openai.types.beta.threads.message_content import (
+    MessageContent,
+    TextContentBlock,
+    ImageFileContentBlock,
+)
+from openai.types.beta.threads.message_content_delta import (
+    TextDeltaBlock,
+    ImageFileDeltaBlock,
+)
+from openai.types.beta.threads.annotation import FilePathAnnotation
 from ...assistant import (
     GLaDOS,
     AssistantResponse,
@@ -213,18 +223,18 @@ async def handle_message_events(ack, client, body, event, say, context):
         }
     )
 
-    pipe = SlackTransport(
+    handler = SlackMessageHandler(
         client, say, session=session, thread_ts=session_id, channel=event.get("channel")
     )
     await assistant.chat(
         prompt,
-        handler=pipe,
+        handler=handler,
         image_urls=image_urls,
         session_id=session_id,
     )
 
 
-class SlackTransport(AsyncAssistantEventHandler):
+class SlackMessageHandler(AsyncAssistantEventHandler):
     """Assistant event handler for Slack."""
 
     def __init__(
@@ -247,7 +257,7 @@ class SlackTransport(AsyncAssistantEventHandler):
 
     def clone(self):
         """Clone the current handler."""
-        return SlackTransport(
+        return SlackMessageHandler(
             self.client,
             self.say,
             session=self.session,
@@ -255,60 +265,98 @@ class SlackTransport(AsyncAssistantEventHandler):
             channel=self.channel,
         )
 
+    async def process_annotation(self, message_content: MessageContent):
+        """Process the annotations in the message content."""
+        if hasattr(message_content.text, "annotations"):
+            for annotation in message_content.text.annotations:
+                if isinstance(annotation, FilePathAnnotation):
+                    replacer = annotation.text
+                    file_id = annotation.file_path.file_id
+                    file_content = await assistant.client.files.content(file_id)
+                    r = await self.client.files_upload_v2(
+                        title="File",
+                        content=file_content.read(),
+                        channel=self.channel,
+                        thread_ts=self.thread_ts,
+                    )
+                    new_text = message_content.text.value.replace(
+                        replacer, r["file"]["permalink"]
+                    )
+                    message_content.text.value = new_text
+        return message_content
+
     @override
     async def on_message_created(self, message):
         """When a message is created, start a new message with the assistant's response."""
         r = await self.say(
-            "`...`",
+            "Thinking...",
             thread_ts=self.thread_ts,
-            blocks=[b.Context(":hourglass_flowing_sand: 대답을 기다리는 중...")],
+            blocks=[b.Context(":hourglass_flowing_sand: Thinking...")],
         )
         self.message_ts = r.get("ts")
 
     @override
     async def on_message_delta(self, delta, snapshot):
-        content = delta.content[0]
-        if content.type == "text":
-            # flush every line if the delta contains newlines
-            if "\n" in delta.content[0].text.value:
-                to_say, _, remain = snapshot.content[0].text.value.rpartition("\n")
-                await self.client.chat_update(
-                    channel=self.channel,
-                    ts=self.message_ts,
-                    text=to_say,
-                    blocks=list(format_response(to_say)),
-                )
-        else:
-            print(f"implement this: {delta=}, {snapshot=}")
+        for content in delta.content:
+            if isinstance(content, TextDeltaBlock):
+                # flush every line if the delta contains newlines
+                if "\n" in (content.text.value or ""):
+                    if isinstance(snapshot.content[0], TextContentBlock):
+                        to_say, _, remain = snapshot.content[0].text.value.rpartition(
+                            "\n"
+                        )
+                        await self.client.chat_update(
+                            channel=self.channel,
+                            ts=self.message_ts,
+                            text=to_say,
+                            blocks=list(format_response(to_say)),
+                        )
+                    elif isinstance(snapshot.content[0], ImageFileContentBlock):
+                        ...
+            else:
+                # print(f"implement this: {delta=}, {snapshot=}")
+                ...
 
     @override
     async def on_message_done(self, message):
         """Update the entire message with the response."""
         # TODO: append action buttons block to the message
-        await self.client.chat_update(
-            channel=self.channel,
-            ts=self.message_ts,
-            text=message.content[0].text.value,
-            blocks=list(format_response(message.content[0].text.value)),
-        )
+        for content in message.content:
+            if isinstance(content, TextContentBlock):
+                content = await self.process_annotation(content)
+                await self.client.chat_update(
+                    channel=self.channel,
+                    ts=self.message_ts,
+                    text=content.text.value,
+                    blocks=list(format_response(content.text.value)),
+                )
+            elif isinstance(content, ImageFileContentBlock):
+                await self.client.chat_delete(channel=self.channel, ts=self.message_ts)
+                image_content = await assistant.client.files.content(
+                    content.image_file.file_id
+                )
+                await self.client.files_upload_v2(
+                    title="Image file",
+                    filetype="png",
+                    content=image_content.read(),
+                    channel=self.channel,
+                    thread_ts=self.thread_ts,
+                )
 
     @override
     async def on_image_file_done(self, image_file):
         """When an image file created by the assistant, upload it to Slack and show it."""
         # TODO: implement this properly
-        image_content = await assistant.client.files.retrieve_content(
-            image_file.file_id
-        )
-        new_file = await self.client.files_upload_v2(
-            title="Image file",
-            filename="image.png",
-            content=image_content,
-        )
-        file_url = new_file.get("file").get("permalink")
-        await self.say(
-            blocks=[b.Image(file_url, "Image file")],
-            thread_ts=self.thread_ts,
-        )
+        # image_content = await assistant.client.files.retrieve_content(
+        #     image_file.file_id
+        # )
+        # await self.client.files_upload(
+        #     title="Image file",
+        #     filename="image.png",
+        #     content=image_content,
+        #     channel=self.channel,
+        #     thread_ts=self.thread_ts,
+        # )
 
     @override
     async def on_tool_call_created(self, tool_call):
@@ -319,6 +367,11 @@ class SlackTransport(AsyncAssistantEventHandler):
             meta = get_tool_meta(tool_call.function.name)
             await self.say(
                 blocks=[b.Context(f"Using {meta.get('icon')} {meta.get('name')}")],
+                thread_ts=self.thread_ts,
+            )
+        elif tool_call.type == "code_interpreter":
+            await self.say(
+                blocks=[b.Context(":keyboard: 코드를 실행하고 있습니다...")],
                 thread_ts=self.thread_ts,
             )
 
@@ -344,4 +397,11 @@ class SlackTransport(AsyncAssistantEventHandler):
 
         elif tool_call.type == "code_interpreter":
             # TODO: implement this ?
+            # await self.client.files_upload_v2(
+            #     title="Code",
+            #     filetype="python",
+            #     content=tool_call.code_interpreter.input,
+            #     channel=self.channel,
+            #     thread_ts=self.thread_ts,
+            # )
             ...
