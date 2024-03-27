@@ -6,7 +6,7 @@ import tempfile
 from typing import Callable, Any, AsyncGenerator
 from typing_extensions import override
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from io import BytesIO
 import requests
 import pytz
@@ -147,6 +147,10 @@ async def handle_message_events(ack, client, body, event, say, context):
     if is_direct_message:
         # in a direct message, all messages are in the same thread
         session_id = event.get("user")
+        session = await SessionManager.get_session(session_id)
+        if session.last_updated < datetime.now(tz=timezone.utc) - timedelta(minutes=5):
+            session.thread_id = None
+        session.thread_id = None
 
     if not session_id:
         # if not in a thread, treat as a new conversation
@@ -209,16 +213,16 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     # fill current context
     info = await client.users_info(user=event["user"])
-    session = SessionManager.get_session(session_id)
-    timezone = info["user"].get("tz", "UTC")
-    current_date = pytz.timezone(timezone).localize(datetime.fromtimestamp(time.time()))
+    session = await SessionManager.get_session(session_id)
+    user_tz = info["user"].get("tz", "UTC")
+    current_date = pytz.timezone(user_tz).localize(datetime.fromtimestamp(time.time()))
     session.context.set(
         {
             "platform": "slack",
             "current_date": current_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "user": event["user"],
             "display_name": info["user"].get("name", {}),
-            "timezone": timezone,
+            "timezone": user_tz,
             "channel": event["channel"],
         }
     )
