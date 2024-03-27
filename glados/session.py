@@ -1,9 +1,9 @@
 import json
-import asyncio
 from typing import Optional
 from queue import Queue
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from openai import AsyncOpenAI
 from .util.langchain import count_tokens
 from .backend.db import use_db
 
@@ -111,7 +111,7 @@ class Session:
             **kwargs,
         )
 
-    def condense(self, client):
+    async def condense(self, client: AsyncOpenAI):
         """make a condensed version of session"""
         recent_conversation = "\n".join(
             f"<{message['role']}> {message['content']}" for message in self.messages
@@ -124,7 +124,7 @@ class Session:
             "Please include as many as important keywords in your summary."
             "Use the most common language of the conversation."
         )
-        result = client.chat.completions.create(
+        result = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {

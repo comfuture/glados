@@ -148,7 +148,10 @@ async def handle_message_events(ack, client, body, event, say, context):
         # in a direct message, all messages are in the same thread
         session_id = event.get("user")
         session = await SessionManager.get_session(session_id)
-        if session.last_updated < datetime.now(tz=timezone.utc) - timedelta(minutes=5):
+        if session.last_updated < datetime.now(tz=timezone.utc) - timedelta(hours=1):
+            # in a direct message, thread can be too long so,
+            # if the last message was sent more than 1 hour ago, treat as a new conversation
+            await session.condense(assistant)
             session.thread_id = None
         session.thread_id = None
 
