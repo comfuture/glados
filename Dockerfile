@@ -1,10 +1,10 @@
-FROM node:18-buster-slim
+FROM python:3.11
 
 WORKDIR /app
 ADD . /app/
 
-RUN npm ci
-RUN npm run build
+ENV FLIT_ROOT_INSTALL=1
+RUN pip install flit
+RUN flit install -s
 
-# start command
-CMD [ "npm", "run", "serve" ]
+CMD [ "python", "main.py" ]
