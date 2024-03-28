@@ -82,7 +82,7 @@ async def handle_message_events(ack, client, body, event, say, context):
     is_bot_thread = event.get("parent_user_id") == app.bot_user_id
 
     # no need to reply on other user's thread. quit
-    if not is_bot_thread:
+    if not is_bot_thread and not is_mentioned and not is_direct_message:
         return
 
     prompt = re.sub(
