@@ -5,7 +5,7 @@ import asyncio
 import tempfile
 from typing_extensions import override
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from io import BytesIO
 import requests
 import pytz
@@ -65,6 +65,10 @@ async def handle_message_events(ack, client, body, event, say, context):
     """Handle a message."""
     await ack()
 
+    # prevent the bot from replying to non-existing channels
+    if not event.get("channel"):
+        return
+
     # if message is from a thread, thread_id is set
     session_id = event.get("thread_ts")
 
@@ -113,7 +117,7 @@ async def handle_message_events(ack, client, body, event, say, context):
                     blocks=[
                         b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")
                     ],
-                    thread_ts=None if is_direct_message else session_id,
+                    thread_ts=session_id,
                 )
                 response = requests.get(
                     file["url_private"],
@@ -213,6 +217,7 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         self.thread_ts = thread_ts
         self.message_ts = message_ts
         self.channel = channel
+        self.tool_outputs = []
 
     def clone(self):
         """Clone the current handler."""
@@ -339,19 +344,33 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         self.run_id = run_step.run_id
 
     @override
+    async def on_end(self) -> None:
+        # after the stream ends, check if the run requires action
+        run = await assistant.client.beta.threads.runs.retrieve(
+            self.run_id, thread_id=self.session.thread_id
+        )
+        if (
+            run.status == "requires_action"
+            and run.required_action.type == "submit_tool_outputs"
+        ):
+            # if needed, submit the tool outputs and continue with cloned handler
+            async with assistant.client.beta.threads.runs.submit_tool_outputs_stream(
+                run_id=self.run_id,
+                thread_id=self.session.thread_id,
+                tool_outputs=self.tool_outputs,
+                event_handler=self.clone(),  # because the event handler can not be reused
+            ) as stream:
+                await stream.until_done()
+
+    @override
     async def on_tool_call_done(self, tool_call):
         """When a tool call delta is done, inject the result to the conversation
         and continue with the submitted tool outputs."""
         if tool_call.type == "function":
             kwargs = json.loads(tool_call.function.arguments)
             result = await invoke_function(tool_call.function.name, **kwargs)
-            async with assistant.client.beta.threads.runs.submit_tool_outputs_stream(
-                run_id=self.run_id,
-                thread_id=self.session.thread_id,
-                tool_outputs=[{"tool_call_id": tool_call.id, "output": result}],
-                event_handler=self.clone(),
-            ) as stream:
-                await stream.until_done()
+
+            self.tool_outputs.append({"tool_call_id": tool_call.id, "output": result})
 
         elif tool_call.type == "code_interpreter":
             # TODO: implement this ?
