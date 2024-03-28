@@ -14,5 +14,4 @@ async def start():
 
 
 if __name__ == "__main__":
-    print(f"Starting the Slack app with env: {os.environ=}")
     asyncio.run(start())

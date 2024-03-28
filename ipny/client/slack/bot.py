@@ -3,7 +3,6 @@ import re
 import json
 import asyncio
 import tempfile
-from typing import Callable, Any, AsyncGenerator
 from typing_extensions import override
 import time
 from datetime import datetime, timezone, timedelta
@@ -19,7 +18,6 @@ from openai.types.beta.threads.message_content import (
 )
 from openai.types.beta.threads.message_content_delta import (
     TextDeltaBlock,
-    ImageFileDeltaBlock,
 )
 from openai.types.beta.threads.annotation import FilePathAnnotation
 from ...assistant import (
@@ -81,6 +79,11 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     is_direct_message = event["channel_type"] == "im" or event["channel_type"] == "mpim"
     is_mentioned = f"<@{app.bot_user_id}>" in prompt
+    is_bot_thread = event.get("parent_user_id") == app.bot_user_id
+
+    # no need to reply on other user's thread. quit
+    if not is_bot_thread:
+        return
 
     prompt = re.sub(
         re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
@@ -91,18 +94,10 @@ async def handle_message_events(ack, client, body, event, say, context):
         session_id = event.get("ts")
 
     if is_direct_message:
-        # in a direct message, all messages are in the same thread
-        session_id = event.get("user")
-        session = await SessionManager.get_session(session_id)
-        if session.last_updated < datetime.now(tz=timezone.utc) - timedelta(hours=1):
-            # in a direct message, thread can be too long so,
-            # if the last message was sent more than 1 hour ago, treat as a new conversation
-            await session.condense(assistant)
-            session.thread_id = None
-        if prompt.startswith("----"):
-            # if the message starts with "----", treat as a new conversation
-            session.thread_id = None
-            return
+        if not event.get("thread_ts"):  # first message in a direct message
+            session_id = event.get("ts")
+        else:
+            session_id = event.get("thread_ts")
 
     if not session_id:
         # if not in a thread, treat as a new conversation
