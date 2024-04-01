@@ -3,10 +3,9 @@ import re
 import json
 import asyncio
 import tempfile
-from typing import Callable, Any, AsyncGenerator
 from typing_extensions import override
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from io import BytesIO
 import requests
 import pytz
@@ -19,12 +18,10 @@ from openai.types.beta.threads.message_content import (
 )
 from openai.types.beta.threads.message_content_delta import (
     TextDeltaBlock,
-    ImageFileDeltaBlock,
 )
 from openai.types.beta.threads.annotation import FilePathAnnotation
 from ...assistant import (
     GLaDOS,
-    AssistantResponse,
     AsyncAssistantEventHandler,
 )
 from ...tool import invoke_function, get_tool_meta
@@ -62,64 +59,15 @@ def download_slack_file(url: str) -> BytesIO:
     return BytesIO(r.content)
 
 
-async def line_iterator(source: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
-    """Iterate over lines of a string or an async generator."""
-    buffer = ""
-    async for chunk in source:
-        if isinstance(chunk, dict):
-            yield chunk
-            continue
-        buffer += chunk
-        if "\n" in chunk:
-            line, buffer = buffer.split("\n", 1)
-            yield line
-    if buffer:
-        yield buffer
-
-
-async def stream_to_transport(
-    source: str | AsyncGenerator[str | AssistantResponse, None],
-    send_func: Callable[[str], Any],
-    channel: str | None = None,
-    thread_ts: str | None = None,
-):
-    """Stream the response to the bot transport."""
-    block_ts: str | None = None
-    block_content = ""
-
-    async for line in source:
-        if isinstance(line, dict):
-            await send_func(
-                blocks=[b.Context(f":information_source: Using {line['content']}")],
-                text=f"* Using {line['content']}",
-                thread_ts=thread_ts,
-            )
-            block_ts = None
-            block_content = ""
-            continue
-        block_content += line + "\n"
-        if not block_ts:
-            r = await send_func(
-                text=block_content,
-                blocks=list(format_response(line)),
-                thread_ts=thread_ts,
-            )
-            block_ts = r.get("ts")
-        else:
-            await app.client.chat_update(
-                channel=channel,
-                ts=block_ts,
-                thread_ts=thread_ts,
-                text=block_content,
-                blocks=list(format_response(block_content)),
-            )
-
-
 @app.event("app_mention")
 @app.event("message")
 async def handle_message_events(ack, client, body, event, say, context):
     """Handle a message."""
     await ack()
+
+    # prevent the bot from replying to non-existing channels
+    if not event.get("channel"):
+        return
 
     # if message is from a thread, thread_id is set
     session_id = event.get("thread_ts")
@@ -135,6 +83,11 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     is_direct_message = event["channel_type"] == "im" or event["channel_type"] == "mpim"
     is_mentioned = f"<@{app.bot_user_id}>" in prompt
+    is_bot_thread = event.get("parent_user_id") == app.bot_user_id
+
+    # no need to reply on other user's thread. quit
+    if not is_bot_thread and not is_mentioned and not is_direct_message:
+        return
 
     prompt = re.sub(
         re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
@@ -145,21 +98,17 @@ async def handle_message_events(ack, client, body, event, say, context):
         session_id = event.get("ts")
 
     if is_direct_message:
-        # in a direct message, all messages are in the same thread
-        session_id = event.get("user")
-        session = await SessionManager.get_session(session_id)
-        if session.last_updated < datetime.now(tz=timezone.utc) - timedelta(hours=1):
-            # in a direct message, thread can be too long so,
-            # if the last message was sent more than 1 hour ago, treat as a new conversation
-            await session.condense(assistant)
-            session.thread_id = None
-        session.thread_id = None
+        if not event.get("thread_ts"):  # first message in a direct message
+            session_id = event.get("ts")
+        else:
+            session_id = event.get("thread_ts")
 
     if not session_id:
         # if not in a thread, treat as a new conversation
         return
 
     image_urls = []
+    file_ids = []
 
     if "files" in event:
         for file in event["files"]:
@@ -168,7 +117,7 @@ async def handle_message_events(ack, client, body, event, say, context):
                     blocks=[
                         b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")
                     ],
-                    thread_ts=None if is_direct_message else session_id,
+                    thread_ts=session_id,
                 )
                 response = requests.get(
                     file["url_private"],
@@ -178,7 +127,7 @@ async def handle_message_events(ack, client, body, event, say, context):
                     BytesIO(response.content), ext=file["filetype"]
                 )
                 image_urls.append(image_url)
-            if file.get("mimetype", "").startswith("audio/"):
+            elif file.get("mimetype", "").startswith("audio/"):
                 response = requests.get(
                     file["url_private_download"],
                     headers={"Authorization": f"Bearer {app.client.token}"},
@@ -197,26 +146,21 @@ async def handle_message_events(ack, client, body, event, say, context):
                             blocks=[b.Context(f":speech_balloon: {transcript.text}")]
                         )
                         prompt += "\n\n" + transcript.text
+            else:
+                file = download_slack_file(file["url_private_download"])
+                uploaded = await assistant.client.files.create(
+                    file=file, purpose="assistants"
+                )
+                file_ids.append(uploaded.id)
 
     if not prompt:
         return
-
-    # extract image url from prompt
-    url_re = re.compile(r"(https?://\S+)")
-    inline_url = re.search(url_re, prompt)
-    if inline_url and is_image_url(inline_url.group(1)):
-        image_url = inline_url.group(1)
-        image_urls.append(image_url)
-        prompt = re.sub(re.compile(rf"<?{re.escape(image_url)}([^>*]>?), "), prompt)
-        await say(
-            blocks=[b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")]
-        )
 
     print(f"<@{event['user']}> {prompt}")
 
     # fill current context
     info = await client.users_info(user=event["user"])
-    session = await SessionManager.get_session(session_id)
+    session = await SessionManager.get_session(session_id, user=event["user"])
     user_tz = info["user"].get("tz", "UTC")
     current_date = pytz.timezone(user_tz).localize(datetime.fromtimestamp(time.time()))
     session.context.set(
@@ -230,6 +174,17 @@ async def handle_message_events(ack, client, body, event, say, context):
         }
     )
 
+    # extract image url from prompt
+    url_re = re.compile(r"(https?://\S+)")
+    inline_url = re.search(url_re, prompt)
+    if inline_url and is_image_url(inline_url.group(1)):
+        image_url = inline_url.group(1)
+        image_urls.append(image_url)
+        prompt = re.sub(re.compile(rf"<?{re.escape(image_url)}([^>*]>?), "), prompt)
+        await say(
+            blocks=[b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")]
+        )
+
     handler = SlackMessageHandler(
         client, say, session=session, thread_ts=session_id, channel=event.get("channel")
     )
@@ -237,6 +192,7 @@ async def handle_message_events(ack, client, body, event, say, context):
         prompt,
         handler=handler,
         image_urls=image_urls,
+        file_ids=file_ids,
         session_id=session_id,
     )
 
@@ -261,6 +217,7 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         self.thread_ts = thread_ts
         self.message_ts = message_ts
         self.channel = channel
+        self.tool_outputs = []
 
     def clone(self):
         """Clone the current handler."""
@@ -338,7 +295,6 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
                     blocks=list(format_response(content.text.value)),
                 )
             elif isinstance(content, ImageFileContentBlock):
-                await self.client.chat_delete(channel=self.channel, ts=self.message_ts)
                 image_content = await assistant.client.files.content(
                     content.image_file.file_id
                 )
@@ -388,19 +344,33 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         self.run_id = run_step.run_id
 
     @override
+    async def on_end(self) -> None:
+        # after the stream ends, check if the run requires action
+        run = await assistant.client.beta.threads.runs.retrieve(
+            self.run_id, thread_id=self.session.thread_id
+        )
+        if (
+            run.status == "requires_action"
+            and run.required_action.type == "submit_tool_outputs"
+        ):
+            # if needed, submit the tool outputs and continue with cloned handler
+            async with assistant.client.beta.threads.runs.submit_tool_outputs_stream(
+                run_id=self.run_id,
+                thread_id=self.session.thread_id,
+                tool_outputs=self.tool_outputs,
+                event_handler=self.clone(),  # because the event handler can not be reused
+            ) as stream:
+                await stream.until_done()
+
+    @override
     async def on_tool_call_done(self, tool_call):
         """When a tool call delta is done, inject the result to the conversation
         and continue with the submitted tool outputs."""
         if tool_call.type == "function":
             kwargs = json.loads(tool_call.function.arguments)
             result = await invoke_function(tool_call.function.name, **kwargs)
-            async with assistant.client.beta.threads.runs.submit_tool_outputs_stream(
-                run_id=self.run_id,
-                thread_id=self.session.thread_id,
-                tool_outputs=[{"tool_call_id": tool_call.id, "output": result}],
-                event_handler=self.clone(),
-            ) as stream:
-                await stream.until_done()
+
+            self.tool_outputs.append({"tool_call_id": tool_call.id, "output": result})
 
         elif tool_call.type == "code_interpreter":
             # TODO: implement this ?

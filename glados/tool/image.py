@@ -58,7 +58,8 @@ async def draw_image(
             "The prompt for the image.\n"
             "As a professional photographer, illustrator, and animator,"
             "You should use rich and descriptive language when describing your prompts."
-            "The prompt should be in English. The prompt should be starts with 'A photo of', 'A 3D render of', 'An illustration of', or 'A painting of'."
+            "The prompt should be in English. The prompt should be starts with "
+            "'A photo of', 'A 3D render of', 'An illustration of', or 'A painting of'. "
             "Including 5-10 descriptive keywords, camera & lens type, color tone and mood, time of day, style of photograph, and type of film "
             "joining with commas. While describing the prompt, you should refer to the recent chat history."
         ),

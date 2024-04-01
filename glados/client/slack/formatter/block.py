@@ -6,8 +6,7 @@ __all__ = ["MrkDwn", "MarkDown", "SourceCode", "Context", "Image"]
 
 def MrkDwn(text: str) -> dict:
     text = re.sub(r"(\#+) (.*)", r"*\2*", text)
-    text = re.sub(r"(\s*)\* (.*)\n", r"\1- \2\n", text)
-    # text = re.sub(r"(https://[^\s^\)]+)", r"[\1](\1)", text)
+    text = re.sub(r"\*\*(.*)\*\*", r"*\1*", text)
     text = re.sub(r"\[(.*)\]\((.*)\)", r"<\2|\1>", text)
 
     return {"type": "mrkdwn", "text": text}
