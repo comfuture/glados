@@ -210,6 +210,15 @@ class SessionManager:
         )
 
     @staticmethod
+    async def has_session(session_id: str) -> bool:
+        """Check if session exists in database"""
+        if session_id in SessionManager.sessions:
+            return True
+        db = use_db()
+        col = db.get_collection("sessions")
+        return await col.count_documents({"session_id": session_id}) > 0
+
+    @staticmethod
     async def get_session(
         session_id, model="gpt-4-turbo", user: Optional[str] = None
     ) -> Session:

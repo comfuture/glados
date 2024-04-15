@@ -69,9 +69,6 @@ async def handle_message_events(ack, client, body, event, say, context):
     if not event.get("channel"):
         return
 
-    # if message is from a thread, thread_id is set
-    session_id = event.get("thread_ts")
-
     if "user" not in event:  # if message event was not sent by a user,
         return
     if (
@@ -83,28 +80,30 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     is_direct_message = event["channel_type"] == "im" or event["channel_type"] == "mpim"
     is_mentioned = f"<@{app.bot_user_id}>" in prompt
-    is_bot_thread = event.get("parent_user_id") == app.bot_user_id
-
-    # no need to reply on other user's thread. quit
-    if not is_bot_thread and not is_mentioned and not is_direct_message:
-        return
-
-    prompt = re.sub(
-        re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
-    ).strip()
 
     if is_mentioned:
         # if mentioned, treat as a new conversation
         session_id = event.get("ts")
-
-    if is_direct_message:
+        prompt = re.sub(
+            re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
+        ).strip()
+    elif is_direct_message:
         if not event.get("thread_ts"):  # first message in a direct message
             session_id = event.get("ts")
         else:
             session_id = event.get("thread_ts")
+    else:
+        # if message is from a thread, thread_id is set
+        session_id = event.get("thread_ts")
 
     if not session_id:
         # if not in a thread, treat as a new conversation
+        return
+
+    is_bot_thread = await SessionManager.has_session(session_id)
+
+    # no need to reply on other user's thread. quit
+    if not is_bot_thread and not is_mentioned and not is_direct_message:
         return
 
     image_urls = []
@@ -329,11 +328,13 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
             # get icon
             meta = get_tool_meta(tool_call.function.name)
             await self.say(
+                f"Using {meta.get('name')}",
                 blocks=[b.Context(f"Using {meta.get('icon')} {meta.get('name')}")],
                 thread_ts=self.thread_ts,
             )
         elif tool_call.type == "code_interpreter":
             await self.say(
+                "Running code...",
                 blocks=[b.Context(":keyboard: 코드를 실행하고 있습니다...")],
                 thread_ts=self.thread_ts,
             )
