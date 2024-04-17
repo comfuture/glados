@@ -69,9 +69,6 @@ async def handle_message_events(ack, client, body, event, say, context):
     if not event.get("channel"):
         return
 
-    # if message is from a thread, thread_id is set
-    session_id = event.get("thread_ts")
-
     if "user" not in event:  # if message event was not sent by a user,
         return
     if (
@@ -83,35 +80,39 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     is_direct_message = event["channel_type"] == "im" or event["channel_type"] == "mpim"
     is_mentioned = f"<@{app.bot_user_id}>" in prompt
-    is_bot_thread = event.get("parent_user_id") == app.bot_user_id
-
-    # no need to reply on other user's thread. quit
-    if not is_bot_thread and not is_mentioned and not is_direct_message:
-        return
-
-    prompt = re.sub(
-        re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
-    ).strip()
 
     if is_mentioned:
         # if mentioned, treat as a new conversation
-        session_id = event.get("ts")
-
-    if is_direct_message:
+        session_id = event.get("thread_ts", event.get("ts"))
+        prompt = re.sub(
+            re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
+        ).strip()
+    elif is_direct_message:
         if not event.get("thread_ts"):  # first message in a direct message
             session_id = event.get("ts")
         else:
             session_id = event.get("thread_ts")
+    else:
+        # if message is from a thread, thread_id is set
+        session_id = event.get("thread_ts")
 
     if not session_id:
         # if not in a thread, treat as a new conversation
         return
 
+    is_bot_thread = await SessionManager.has_session(session_id)
+
+    # no need to reply on other user's thread. quit
+    if not is_bot_thread and not is_mentioned and not is_direct_message:
+        return
+
     image_urls = []
+    video_urls = []
     file_ids = []
 
     if "files" in event:
         for file in event["files"]:
+            print(f"{file['url_private']=} {file.get('mimetype', '')=}")
             if file.get("mimetype", "").startswith("image/"):
                 await say(
                     blocks=[
@@ -127,6 +128,9 @@ async def handle_message_events(ack, client, body, event, say, context):
                     BytesIO(response.content), ext=file["filetype"]
                 )
                 image_urls.append(image_url)
+            elif file.get("mimetype", "").startswith("video/"):
+                video_urls.append(file["url_private_download"])
+
             elif file.get("mimetype", "").startswith("audio/"):
                 response = requests.get(
                     file["url_private_download"],
@@ -139,7 +143,7 @@ async def handle_message_events(ack, client, body, event, say, context):
                     with open(tmp.name, "wb+") as f:
                         f.write(response.content)
                         f.seek(0)
-                        transcript = assistant.client.audio.transcriptions.create(
+                        transcript = await assistant.client.audio.transcriptions.create(
                             model="whisper-1", file=f
                         )
                         await say(
@@ -156,6 +160,25 @@ async def handle_message_events(ack, client, body, event, say, context):
     if not prompt:
         return
 
+    print(f"<@{event['user']}> {prompt}")
+
+    # fill current context
+    info = await client.users_info(user=event["user"])
+    session = await SessionManager.get_session(session_id, user=event["user"])
+    user_tz = info["user"].get("tz", "UTC")
+    current_date = pytz.timezone(user_tz).localize(datetime.fromtimestamp(time.time()))
+    session.context.set(
+        {
+            "platform": "slack",
+            "platform_client": client,
+            "current_date": current_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "user": event["user"],
+            "display_name": info["user"].get("name", {}),
+            "timezone": user_tz,
+            "channel": event["channel"],
+        }
+    )
+
     # extract image url from prompt
     url_re = re.compile(r"(https?://\S+)")
     inline_url = re.search(url_re, prompt)
@@ -167,24 +190,6 @@ async def handle_message_events(ack, client, body, event, say, context):
             blocks=[b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")]
         )
 
-    print(f"<@{event['user']}> {prompt}")
-
-    # fill current context
-    info = await client.users_info(user=event["user"])
-    session = await SessionManager.get_session(session_id)
-    user_tz = info["user"].get("tz", "UTC")
-    current_date = pytz.timezone(user_tz).localize(datetime.fromtimestamp(time.time()))
-    session.context.set(
-        {
-            "platform": "slack",
-            "current_date": current_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
-            "user": event["user"],
-            "display_name": info["user"].get("name", {}),
-            "timezone": user_tz,
-            "channel": event["channel"],
-        }
-    )
-
     handler = SlackMessageHandler(
         client, say, session=session, thread_ts=session_id, channel=event.get("channel")
     )
@@ -192,6 +197,7 @@ async def handle_message_events(ack, client, body, event, say, context):
         prompt,
         handler=handler,
         image_urls=image_urls,
+        video_urls=video_urls,
         file_ids=file_ids,
         session_id=session_id,
     )

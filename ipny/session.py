@@ -210,10 +210,26 @@ class SessionManager:
         )
 
     @staticmethod
+    async def has_session(session_id: str) -> bool:
+        """Check if session exists in database"""
+        if session_id in SessionManager.sessions:
+            return True
+        db = use_db()
+        col = db.get_collection("sessions")
+        return await col.count_documents({"session_id": session_id}) > 0
+
+    @staticmethod
     async def get_session(
         session_id, model="gpt-4-turbo", user: Optional[str] = None
     ) -> Session:
-        """Get a session. if not exists, create one."""
+        """Get a session. if not exists, create one.
+
+        Parameters:
+            session_id : str
+            model : str, optional (default="gpt-4-turbo")
+            user : str, optional (default=None), this is used for tracking user's session.
+                   only affects the first time session is created.
+        """
         # gabage collection if number of sessions exceeds 100 for saving memory
         if len(SessionManager.sessions) > 100:
             sorted_sessions = sorted(
