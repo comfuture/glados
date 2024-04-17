@@ -24,6 +24,7 @@ class Ipny:
         session_id: str,
         file_ids: Optional[list[str]] = [],
         image_urls: Optional[list[str]] = None,
+        video_urls: Optional[list[str]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
         """Try to chat with the assistant.
@@ -62,6 +63,10 @@ class Ipny:
         if image_urls and len(image_urls) > 0:
             urls = "\n".join(f"- {image_url}" for image_url in image_urls)
             message = f"Image URLs:\n{urls}\n{message}"
+
+        if video_urls and len(video_urls) > 0:
+            urls = "\n".join(f"- {video_url}" for video_url in video_urls)
+            message = f"Video URLs:\n{urls}\n{message}"
 
         session(message)
         await self.client.beta.threads.messages.create(
