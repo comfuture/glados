@@ -24,7 +24,7 @@ async def process_image(
     print(f"process_image {image_url=} {prompt=}")
     client = AsyncOpenAI()
     s = Session(
-        model="gpt-4-vision-preview",
+        model="gpt-4-turbo",
         system_prompt=(
             "You are a programming interface for vision model."
             "You can describe, query with the image, grab information from the image, etc."
