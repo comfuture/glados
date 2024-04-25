@@ -1,13 +1,10 @@
 import os
-from typing import Optional, Mapping, Any
 import urllib.parse
-from motor.core import AgnosticDatabase, AgnosticCollection
 from motor.motor_asyncio import (
     AsyncIOMotorClient,
     AsyncIOMotorDatabase,
     AsyncIOMotorCollection,
 )
-from bson import ObjectId
 
 _connections = {}
 

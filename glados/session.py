@@ -4,7 +4,7 @@ from queue import Queue
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
-from .util.langchain import count_tokens
+from .backend.util import count_tokens
 from .backend.db import use_db
 
 # max recent tokens of session by model
@@ -40,8 +40,9 @@ class Session:
         user: Optional[str] = "",
     ):
         self.id: str = session_id or random_session_id()
-        self.thread_id: str = None
+        self.thread_id: Optional[str] = None
         self.file_ids: list[str] = []
+        self.vector_store_id: Optional[str] = None
         self.last_updated = datetime.now(timezone.utc)
         self.model = model
         self.user = user
@@ -152,13 +153,14 @@ class Session:
     @classmethod
     def from_snapshot(cls, snapshot: dict):
         instance = cls(
-            session_id=snapshot["session_id"],
-            model=snapshot["model"],
-            user=snapshot["user"],
+            session_id=snapshot.get("session_id"),
+            model=snapshot.get("model"),
+            user=snapshot.get("user"),
         )
-        instance.thread_id = snapshot["thread_id"]
-        instance.last_updated = snapshot["last_updated"]
-        instance.messages = snapshot["messages"]
+        instance.thread_id = snapshot.get("thread_id")
+        instance.vector_store_id = snapshot.get("vector_store_id")
+        instance.last_updated = snapshot.get("last_updated")
+        instance.messages = snapshot.get("messages")
         return instance
 
     def to_dict(self):
@@ -166,6 +168,7 @@ class Session:
         return {
             "session_id": self.id,
             "thread_id": self.thread_id,
+            "vector_store_id": self.vector_store_id,
             "last_updated": self.last_updated.isoformat(),
             "model": self.model,
             "user": self.user,
@@ -189,7 +192,7 @@ class SessionManager:
     current = property(get_current, set_current)
 
     @staticmethod
-    async def save_session(self, session_id: str):
+    async def save_session(session_id: str):
         """persist session snapshot"""
         db = use_db()
         col = db.get_collection("sessions")
@@ -199,14 +202,19 @@ class SessionManager:
             raise ValueError(f"session {session_id} not found")
             return
 
-        await col.insert_one(
+        await col.update_one(
+            {"session_id": session.id},
             {
-                "session_id": session.id,
-                "last_updated": session.last_updated,
-                "model": session.model,
-                "user": session.user,
-                "messages": session.messages,
-            }
+                "$set": {
+                    "thread_id": session.thread_id,
+                    "vector_store_id": session.vector_store_id,
+                    "last_updated": session.last_updated,
+                    "model": session.model,
+                    "user": session.user,
+                    "messages": session.messages,
+                }
+            },
+            upsert=True,
         )
 
     @staticmethod
