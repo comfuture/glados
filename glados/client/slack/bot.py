@@ -83,7 +83,7 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     if is_mentioned:
         # if mentioned, treat as a new conversation
-        session_id = event.get("ts")
+        session_id = event.get("thread_ts", event.get("ts"))
         prompt = re.sub(
             re.compile(rf"<@{app.bot_user_id}>", re.IGNORECASE), "", prompt
         ).strip()

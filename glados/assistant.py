@@ -172,6 +172,7 @@ class GLaDOS:
             image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
             tools (list[str], optional): The list of tools to use. Defaults to [].
         """
+        need_to_save = False
         session = await SessionManager.get_session(session_id)
         SessionManager.current = session
 
@@ -179,29 +180,36 @@ class GLaDOS:
         if functions:
             tools.extend(functions)
 
-        if file_ids and len(file_ids) > 0:
-            # append {'type': 'interpreter'} to tools deduped
-            tools.append({"type": "interpreter"})
-
         if (
             not session.thread_id
         ):  # if session.thread_id is not set, create a new thread
             thread = await self.client.beta.threads.create()
             session.thread_id = thread.id
-            db = use_db()
-            col = db.get_collection("sessions")
-            await col.update_one(
-                {"session_id": session.id},
-                {"$set": {"thread_id": session.thread_id}},
-            )
+            need_to_save = True
 
         if image_urls and len(image_urls) > 0:
             urls = "\n".join(f"- {image_url}" for image_url in image_urls)
-            message = f"Image URLs:\n{urls}\n{message}"
+            message = f"Image URLs:\n\n{urls}\n{message}"
 
         session(message)
+        attachments = []
+        if file_ids:
+            attachments = [
+                {
+                    "file_id": file_id,
+                    "tools": [{"type": "file_search"}, {"type": "code_interpreter"}],
+                }
+                for file_id in file_ids
+            ]
+
+        if need_to_save:
+            await SessionManager.save_session(session_id)
+
         await self.client.beta.threads.messages.create(
-            thread_id=session.thread_id, role="user", content=message, file_ids=file_ids
+            thread_id=session.thread_id,
+            role="user",
+            content=message,
+            attachments=attachments,
         )
 
         async with self.client.beta.threads.runs.create_and_stream(
