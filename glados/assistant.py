@@ -8,6 +8,7 @@ from openai import (
     AsyncOpenAI,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from openai.types.beta.threads.message_create_params import Attachment
 from .backend.db import use_db
 from .session import SessionManager, Session
 from .tool import invoke_tool_calls, choose_tools, context
@@ -158,8 +159,9 @@ class GLaDOS:
         *,
         handler: AsyncAssistantEventHandler,
         session_id: str,
-        file_ids: Optional[list[str]] = [],
+        # file_ids: Optional[list[str]] = [],
         image_urls: Optional[list[str]] = None,
+        attachments: Optional[list[Attachment]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
         """Try to chat with the assistant.
@@ -168,7 +170,7 @@ class GLaDOS:
             message (str): The message to send to the assistant.
             handler (AsyncAssistantEventHandler): The event handler.
             session_id (str): The ID of the session.
-            file_ids (list[str], optional): The list of file IDs to include in the conversation. Defaults to None.
+            attachments (list[Attachment], optional): The list of attachments to include in the conversation. Defaults to None.
             image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
             tools (list[str], optional): The list of tools to use. Defaults to [].
         """
@@ -192,15 +194,6 @@ class GLaDOS:
             message = f"Image URLs:\n\n{urls}\n{message}"
 
         session(message)
-        attachments = []
-        if file_ids:
-            attachments = [
-                {
-                    "file_id": file_id,
-                    "tools": [{"type": "file_search"}, {"type": "code_interpreter"}],
-                }
-                for file_id in file_ids
-            ]
 
         if need_to_save:
             await SessionManager.save_session(session_id)

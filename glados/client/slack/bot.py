@@ -27,6 +27,7 @@ from ...assistant import (
 from ...tool import invoke_function, get_tool_meta
 from ...session import SessionManager, Session
 from ...util import is_image_url, make_public_url
+from ...util.file import upload_files
 from .formatter import block as b, format_response
 
 
@@ -107,8 +108,8 @@ async def handle_message_events(ack, client, body, event, say, context):
         return
 
     image_urls = []
-    file_ids = []
-
+    to_uploaded = []
+    attachments = []
     if "files" in event:
         for file in event["files"]:
             if file.get("mimetype", "").startswith("image/"):
@@ -142,15 +143,42 @@ async def handle_message_events(ack, client, body, event, say, context):
                             model="whisper-1", file=f
                         )
                         await say(
-                            blocks=[b.Context(f":speech_balloon: {transcript.text}")]
+                            "Transcribing audio...",
+                            blocks=[b.Context(f":speech_balloon: {transcript.text}")],
+                            thread_ts=session_id,
                         )
                         prompt += "\n\n" + transcript.text
             else:
-                file = download_slack_file(file["url_private_download"])
-                uploaded = await assistant.client.files.create(
-                    file=file, purpose="assistants"
-                )
-                file_ids.append(uploaded.id)
+                file_content = download_slack_file(file["url_private_download"])
+
+                # extract embeddings for retrieval
+                # if file.get("mimetype", "").startswith("application/pdf"):
+                #     with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+                #         with open(tmp.name, "wb+") as f:
+                #             f.write(file_content.getvalue())
+                #             f.seek(0)
+
+                #             await say(
+                #                 "Extracting text from PDF...",
+                #                 blocks=[
+                #                     b.Context(
+                #                         ":page_facing_up: PDF 파일에서 텍스트를 추출하고 있습니다..."
+                #                     )
+                #                 ],
+                #                 thread_ts=session_id,
+                #             )
+                #             await save_document(
+                #                 f.name, namespace=[f"session/{session_id}"]
+                #             )
+                # else:
+                # upload to OpenAI for code_interpreter
+                to_uploaded.append((file["name"], file_content, file["mimetype"]))
+                # uploaded = await assistant.client.files.create(
+                #     file=(file["name"], file_content, file["mimetype"]),
+                #     purpose="assistants",
+                # )
+                # file_ids.append(uploaded.id)
+            attachments = await upload_files(to_uploaded)
 
     if not prompt:
         return
@@ -191,7 +219,7 @@ async def handle_message_events(ack, client, body, event, say, context):
         prompt,
         handler=handler,
         image_urls=image_urls,
-        file_ids=file_ids,
+        attachments=attachments,
         session_id=session_id,
     )
 
@@ -308,7 +336,7 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
     @override
     async def on_image_file_done(self, image_file):
         """When an image file created by the assistant, upload it to Slack and show it."""
-        # TODO: implement this properly
+        # TODO: upload to slack?
         # image_content = await assistant.client.files.retrieve_content(
         #     image_file.file_id
         # )
@@ -336,6 +364,12 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
             await self.say(
                 "Running code...",
                 blocks=[b.Context(":keyboard: 코드를 실행하고 있습니다...")],
+                thread_ts=self.thread_ts,
+            )
+        elif tool_call.type == "file_search":
+            await self.say(
+                "Searching files...",
+                blocks=[b.Context(":mag: 파일을 검색하고 있습니다...")],
                 thread_ts=self.thread_ts,
             )
 

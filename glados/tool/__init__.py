@@ -123,8 +123,8 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
         return None
 
     def get_tool(tool_name):
-        if tool_name == "code_interpreter":
-            return {"type": "code_interpreter"}
+        if tool_name in ("code_interpreter", "file_search"):
+            return {"type": tool_name}
         tool = __registry__.get(tool_name)
         if tool is None:
             return None
@@ -141,6 +141,9 @@ async def choose_tools(message: str) -> list[dict] | None:
             f"- {tool_name}: {impl['schema'].get('description', tool_name)}"
             for tool_name, impl in __registry__.items()
         ]
+    )
+    tool_names += (
+        "\n- file_search: Search and query from files for accurate information."
     )
     tool_names += "\n- code_interpreter: Create and run python code. also can process files, evaluate math expressions, etc."
 
