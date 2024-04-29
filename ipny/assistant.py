@@ -4,6 +4,7 @@ from openai import (
     AsyncAssistantEventHandler,
     AsyncOpenAI,
 )
+from openai.types.beta.threads.message_create_params import Attachment
 from .backend.db import use_db
 from .session import SessionManager
 from .tool import choose_tools
@@ -22,9 +23,9 @@ class Ipny:
         *,
         handler: AsyncAssistantEventHandler,
         session_id: str,
-        file_ids: Optional[list[str]] = [],
         image_urls: Optional[list[str]] = None,
         video_urls: Optional[list[str]] = None,
+        attachments: Optional[list[Attachment]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
         """Try to chat with the assistant.
@@ -33,10 +34,12 @@ class Ipny:
             message (str): The message to send to the assistant.
             handler (AsyncAssistantEventHandler): The event handler.
             session_id (str): The ID of the session.
-            file_ids (list[str], optional): The list of file IDs to include in the conversation. Defaults to None.
             image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
+            video_urls (list[str], optional): The list of video URLs to include in the conversation. Defaults to None.
+            attachments (list[Attachment], optional): The list of attachments to include in the conversation. Defaults to None.
             tools (list[str], optional): The list of tools to use. Defaults to [].
         """
+        need_to_save = False
         session = await SessionManager.get_session(session_id)
         SessionManager.current = session
 
@@ -44,21 +47,12 @@ class Ipny:
         if functions:
             tools.extend(functions)
 
-        if file_ids and len(file_ids) > 0:
-            # append {'type': 'interpreter'} to tools deduped
-            tools.append({"type": "code_interpreter"})
-
         if (
             not session.thread_id
         ):  # if session.thread_id is not set, create a new thread
             thread = await self.client.beta.threads.create()
             session.thread_id = thread.id
-            db = use_db()
-            col = db.get_collection("sessions")
-            await col.update_one(
-                {"session_id": session.id},
-                {"$set": {"thread_id": session.thread_id}},
-            )
+            need_to_save = True
 
         if image_urls and len(image_urls) > 0:
             urls = "\n".join(f"- {image_url}" for image_url in image_urls)
@@ -69,11 +63,18 @@ class Ipny:
             message = f"Video URLs:\n{urls}\n{message}"
 
         session(message)
+
+        if need_to_save:
+            await SessionManager.save_session(session_id)
+
         await self.client.beta.threads.messages.create(
-            thread_id=session.thread_id, role="user", content=message, file_ids=file_ids
+            thread_id=session.thread_id,
+            role="user",
+            content=message,
+            attachments=attachments,
         )
 
-        async with self.client.beta.threads.runs.create_and_stream(
+        async with self.client.beta.threads.runs.stream(
             thread_id=session.thread_id,
             assistant_id=self.assistant_id,
             tools=tools,
