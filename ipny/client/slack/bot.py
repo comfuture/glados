@@ -27,6 +27,7 @@ from ...assistant import (
 from ...tool import invoke_function, get_tool_meta
 from ...session import SessionManager, Session
 from ...util import is_image_url, make_public_url
+from ...util.file import upload_files
 from .formatter import block as b, format_response
 
 
@@ -108,7 +109,8 @@ async def handle_message_events(ack, client, body, event, say, context):
 
     image_urls = []
     video_urls = []
-    file_ids = []
+    to_uploaded = []
+    attachments = []
 
     if "files" in event:
         for file in event["files"]:
@@ -151,11 +153,9 @@ async def handle_message_events(ack, client, body, event, say, context):
                         )
                         prompt += "\n\n" + transcript.text
             else:
-                file = download_slack_file(file["url_private_download"])
-                uploaded = await assistant.client.files.create(
-                    file=file, purpose="assistants"
-                )
-                file_ids.append(uploaded.id)
+                file_content = download_slack_file(file["url_private_download"])
+                to_uploaded.append((file["name"], file_content, file["mimetype"]))
+        attachments = await upload_files(to_uploaded)
 
     if not prompt:
         return
@@ -198,7 +198,7 @@ async def handle_message_events(ack, client, body, event, say, context):
         handler=handler,
         image_urls=image_urls,
         video_urls=video_urls,
-        file_ids=file_ids,
+        attachments=attachments,
         session_id=session_id,
     )
 
@@ -341,6 +341,12 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         elif tool_call.type == "code_interpreter":
             await self.say(
                 blocks=[b.Context(":keyboard: 코드를 실행하고 있습니다...")],
+                thread_ts=self.thread_ts,
+            )
+        elif tool_call.type == "file_search":
+            await self.say(
+                "Searching files...",
+                blocks=[b.Context(":mag: 파일을 검색하고 있습니다...")],
                 thread_ts=self.thread_ts,
             )
 

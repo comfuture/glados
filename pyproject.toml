@@ -15,9 +15,10 @@ dependencies = [
   "python-dotenv>=1.0.1",
   "function-schema>=0.2.0",
   "motor>=3.3.2",
-  "openai>=1.14.0",
+  "openai>=1.23.6",
   "pytz>=2024.1",
-  "slack-bolt>=1.18.0",
+  "slack-cli-hooks",
+  "slack-bolt>=1.19.0rc1",
   "tiktoken>=0.5.2",
   "websockets>=12.0",
 ]

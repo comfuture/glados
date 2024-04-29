@@ -42,6 +42,7 @@ class Session:
         self.id: str = session_id or random_session_id()
         self.thread_id: str = None
         self.file_ids: list[str] = []
+        self.vector_store_id: Optional[str] = None
         self.last_updated = datetime.now(timezone.utc)
         self.model = model
         self.user = user
@@ -156,9 +157,10 @@ class Session:
             model=snapshot["model"],
             user=snapshot["user"],
         )
-        instance.thread_id = snapshot["thread_id"]
-        instance.last_updated = snapshot["last_updated"]
-        instance.messages = snapshot["messages"]
+        instance.thread_id = snapshot.get("thread_id")
+        instance.vector_store_id = snapshot.get("vector_store_id")
+        instance.last_updated = snapshot.get("last_updated")
+        instance.messages = snapshot.get("messages", [])
         return instance
 
     def to_dict(self):
@@ -166,6 +168,7 @@ class Session:
         return {
             "session_id": self.id,
             "thread_id": self.thread_id,
+            "vector_store_id": self.vector_store_id,
             "last_updated": self.last_updated.isoformat(),
             "model": self.model,
             "user": self.user,
@@ -189,7 +192,7 @@ class SessionManager:
     current = property(get_current, set_current)
 
     @staticmethod
-    async def save_session(self, session_id: str):
+    async def save_session(session_id: str):
         """persist session snapshot"""
         db = use_db()
         col = db.get_collection("sessions")
