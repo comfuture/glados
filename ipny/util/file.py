@@ -98,6 +98,10 @@ async def upload_files(
             tools.append({"type": "code_interpreter"})
         if content_type in SEARCHABLE_FILE_TYPES:
             tools.append({"type": "file_search"})
+        if len(tools) == 0:
+            tools.append(
+                {"type": "code_interpreter"}
+            )  # XXX: should have at least one tool
 
         attachments.append(
             {
