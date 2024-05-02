@@ -19,7 +19,10 @@ from openai.types.beta.threads.message_content import (
 from openai.types.beta.threads.message_content_delta import (
     TextDeltaBlock,
 )
-from openai.types.beta.threads.annotation import FilePathAnnotation
+from openai.types.beta.threads.annotation import (
+    FilePathAnnotation,
+    FileCitationAnnotation,
+)
 from ...assistant import (
     GLaDOS,
     AsyncAssistantEventHandler,
@@ -224,6 +227,20 @@ async def handle_message_events(ack, client, body, event, say, context):
     )
 
 
+file_info_cache = {}
+
+
+async def get_file_info(file_id: str):
+    """
+    Retrieves information about a file given its ID.
+    """
+    if file_id in file_info_cache:
+        return file_info_cache[file_id]
+    file_info = await assistant.client.files.retrieve(file_id)
+    file_info_cache[file_id] = file_info
+    return file_info
+
+
 class SlackMessageHandler(AsyncAssistantEventHandler):
     """Assistant event handler for Slack."""
 
@@ -245,6 +262,7 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
         self.message_ts = message_ts
         self.channel = channel
         self.tool_outputs = []
+        self.citations = {}
 
     def clone(self):
         """Clone the current handler."""
@@ -274,6 +292,13 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
                         replacer, r["file"]["permalink"]
                     )
                     message_content.text.value = new_text
+                if isinstance(annotation, FileCitationAnnotation):
+                    replacer = annotation.text
+                    file_id = annotation.file_citation.file_id
+                    file_info = await get_file_info(file_id)
+                    new_text = message_content.text.value.replace(replacer, "")
+                    message_content.text.value = new_text
+                    self.citations[file_id] = file_info
         return message_content
 
     @override
@@ -332,6 +357,26 @@ class SlackMessageHandler(AsyncAssistantEventHandler):
                     channel=self.channel,
                     thread_ts=self.thread_ts,
                 )
+
+        # add citations info below
+        if len(self.citations):
+            await self.say(
+                attachments=[
+                    {
+                        "title": "References",
+                        "fields": [
+                            {
+                                "title": file_info.filename,
+                                "value": f"{file_info.bytes} bytes",
+                            }
+                            for file_info in self.citations.values()
+                        ],
+                        "color": "#36a64f",
+                    }
+                ],
+                thread_ts=self.thread_ts,
+            )
+            self.citations = {}
 
     @override
     async def on_image_file_done(self, image_file):

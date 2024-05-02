@@ -9,15 +9,15 @@ RUNNABLE_FILE_TYPES = [
     "text/x-c",
     "text/x-csharp",
     "text/x-c++",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    # "application/msword",
+    # "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/html",
     "text/x-java",
     "application/json",
     "text/markdown",
-    "application/pdf",
+    # "application/pdf",
     "text/x-php",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    # "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "text/x-python",
     "text/x-script.python",
     "text/x-ruby",
@@ -98,6 +98,10 @@ async def upload_files(
             tools.append({"type": "code_interpreter"})
         if content_type in SEARCHABLE_FILE_TYPES:
             tools.append({"type": "file_search"})
+        if len(tools) == 0:
+            tools.append(
+                {"type": "code_interpreter"}
+            )  # XXX: should have at least one tool
 
         attachments.append(
             {
