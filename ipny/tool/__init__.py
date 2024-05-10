@@ -130,7 +130,7 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
             return None
         return {"type": "function", "function": tool["schema"]}
 
-    return [get_tool(tool_name) for tool_name in tool_names]
+    return [get_tool(tool_name) for tool_name in set(tool_names)]
 
 
 async def choose_tools(message: str) -> list[dict] | None:
