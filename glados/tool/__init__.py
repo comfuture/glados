@@ -3,6 +3,7 @@ import glob
 import importlib.util
 import inspect
 import json
+import logging
 from typing import Optional, TypedDict, Callable
 from contextvars import ContextVar
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
@@ -100,12 +101,11 @@ async def invoke_tool_calls(tool_calls: list[ChoiceDeltaToolCall]):
             kwargs = {}
         try:
             result = await invoke_function(function_name, **kwargs)
-            print(f"invoke {result=}")
-        except Exception as e:
+        except Exception as exc:
             result = "Error: " + str(
-                e
+                exc
             )  # don't raise an error, but return a message when something goes wrong
-            print(f"error {result=}")
+            logging.error(f"Error while invoking tool {function_name}", exc_info=exc)
         messages.append(
             {
                 "role": "tool",
@@ -130,7 +130,7 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
             return None
         return {"type": "function", "function": tool["schema"]}
 
-    return [get_tool(tool_name) for tool_name in tool_names]
+    return [get_tool(tool_name) for tool_name in set(tool_names)]
 
 
 async def choose_tools(message: str) -> list[dict] | None:
