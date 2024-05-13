@@ -9,13 +9,14 @@ authors = [{ email = "comfuture@gmail.com", name = "Changkyun Kim" }]
 dynamic = ["version", "description"]
 
 dependencies = [
+  "anthropic>=0.25.7",
   "boto3>=1.28.83",
   "click>=8.1.7",
   "discord.py>=2.3.2",
   "python-dotenv>=1.0.1",
   "function-schema>=0.2.0",
   "motor>=3.3.2",
-  "openai>=1.25.0",
+  "openai>=1.28.1",
   "openparse>=0.5.2",
   "slack-bolt>=1.18.0",
   "streamlit>=1.29.0",

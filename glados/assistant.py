@@ -8,7 +8,10 @@ from openai import (
     AsyncOpenAI,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
-from openai.types.beta.threads.message_create_params import Attachment
+from openai.types.beta.threads.message_create_params import (
+    Attachment,
+    MessageContentPartParam,
+)
 from .backend.db import use_db
 from .session import SessionManager, Session
 from .tool import invoke_tool_calls, choose_tools, context
@@ -155,12 +158,10 @@ class GLaDOS:
 
     async def chat(
         self,
-        message: str,
+        message: str | MessageContentPartParam,
         *,
         handler: AsyncAssistantEventHandler,
         session_id: str,
-        # file_ids: Optional[list[str]] = [],
-        image_urls: Optional[list[str]] = None,
         attachments: Optional[list[Attachment]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
@@ -188,10 +189,6 @@ class GLaDOS:
             thread = await self.client.beta.threads.create()
             session.thread_id = thread.id
             need_to_save = True
-
-        if image_urls and len(image_urls) > 0:
-            urls = "\n".join(f"- {image_url}" for image_url in image_urls)
-            message = f"Image URLs:\n\n{urls}\n{message}"
 
         session(message)
 
