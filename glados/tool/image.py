@@ -13,7 +13,7 @@ __all__ = (
 )
 
 
-@plugin(name="Vision", icon="👁️")
+# @plugin(name="Vision", icon="👁️")
 async def process_image(
     image_url: Annotated[str, "The public URL of the image."],
     prompt: Annotated[
