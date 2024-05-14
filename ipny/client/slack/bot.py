@@ -111,16 +111,15 @@ async def handle_message_events(ack, client, body, event, say, context):
     if not is_bot_thread and not is_mentioned and not is_direct_message:
         return
 
-    image_urls = []
-    video_urls = []
+    content_blocks = []
     to_uploaded = []
     attachments = []
 
     if "files" in event:
         for file in event["files"]:
-            print(f"{file['url_private']=} {file.get('mimetype', '')=}")
             if file.get("mimetype", "").startswith("image/"):
                 await say(
+                    "Looking at the image...",
                     blocks=[
                         b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")
                     ],
@@ -130,13 +129,16 @@ async def handle_message_events(ack, client, body, event, say, context):
                     file["url_private"],
                     headers={"Authorization": f"Bearer {app.client.token}"},
                 )
-                image_url = make_public_url(
-                    BytesIO(response.content), ext=file["filetype"]
+                image_file = await assistant.client.files.create(
+                    file=(file["name"], BytesIO(response.content), file["mimetype"]),
+                    purpose="assistants",
                 )
-                image_urls.append(image_url)
-            elif file.get("mimetype", "").startswith("video/"):
-                video_urls.append(file["url_private_download"])
-
+                content_blocks.append(
+                    {
+                        "type": "image_file",
+                        "image_file": {"file_id": image_file.id},
+                    }
+                )
             elif file.get("mimetype", "").startswith("audio/"):
                 response = requests.get(
                     file["url_private_download"],
@@ -147,24 +149,56 @@ async def handle_message_events(ack, client, body, event, say, context):
                 # XXX: use a temporary file because BytesIO doesn't work here
                 with tempfile.NamedTemporaryFile(suffix=".mp4") as tmp:
                     with open(tmp.name, "wb+") as f:
+                        await say(
+                            "Transcribing audio...",
+                            blocks=[b.Context(":speech_balloon: 소리를 듣는 중입니다")],
+                            thread_ts=session_id,
+                        )
                         f.write(response.content)
                         f.seek(0)
                         transcript = await assistant.client.audio.transcriptions.create(
                             model="whisper-1", file=f
                         )
-                        await say(
-                            blocks=[b.Context(f":speech_balloon: {transcript.text}")]
+                        print(f"{transcript.text=}")
+                        content_blocks.append(
+                            {
+                                "type": "text",
+                                "text": f"Transcripted from audio:\n{transcript.text}",
+                            }
                         )
-                        prompt += "\n\n" + transcript.text
             else:
                 file_content = download_slack_file(file["url_private_download"])
                 to_uploaded.append((file["name"], file_content, file["mimetype"]))
-        attachments = await upload_files(to_uploaded)
+            attachments = await upload_files(to_uploaded)
 
-    if not prompt:
+    if not prompt and len(content_blocks) == 0:
         return
 
     print(f"<@{event['user']}> {prompt}")
+
+    # extract image url from prompt
+    url_re = re.compile(r"(https?://\S+)")
+    inline_url = re.search(url_re, prompt)
+    if inline_url and is_image_url(inline_url.group(1)):
+        image_url = inline_url.group(1)
+        content_blocks.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": image_url},
+            }
+        )
+        prompt = re.sub(re.compile(rf"<?{re.escape(image_url)}([^>*]>?), "), prompt)
+
+    if len(content_blocks) > 0:
+        if prompt:
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "text": prompt,
+                }
+            )
+            del prompt
+        prompt = content_blocks[:]
 
     # fill current context
     info = await client.users_info(user=event["user"])
@@ -183,25 +217,12 @@ async def handle_message_events(ack, client, body, event, say, context):
         }
     )
 
-    # extract image url from prompt
-    url_re = re.compile(r"(https?://\S+)")
-    inline_url = re.search(url_re, prompt)
-    if inline_url and is_image_url(inline_url.group(1)):
-        image_url = inline_url.group(1)
-        image_urls.append(image_url)
-        prompt = re.sub(re.compile(rf"<?{re.escape(image_url)}([^>*]>?), "), prompt)
-        await say(
-            blocks=[b.Context(":frame_with_picture: 이미지를 살펴보고 있습니다...")]
-        )
-
     handler = SlackMessageHandler(
         client, say, session=session, thread_ts=session_id, channel=event.get("channel")
     )
     await assistant.chat(
         prompt,
         handler=handler,
-        image_urls=image_urls,
-        video_urls=video_urls,
         attachments=attachments,
         session_id=session_id,
     )

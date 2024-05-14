@@ -135,6 +135,10 @@ def format_tools(tool_names: list[str]) -> list[dict] | None:
 
 async def choose_tools(message: str) -> list[dict] | None:
     """automatically choose tools from a message."""
+
+    # temporarily disable choosing tools
+    return None
+
     ai = AsyncOpenAI()
     tool_names = "\n".join(
         [

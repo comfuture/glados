@@ -1,13 +1,27 @@
 import os
-from typing import Optional
+from typing import Optional, TypedDict
+from enum import Enum
 from openai import (
     AsyncAssistantEventHandler,
     AsyncOpenAI,
 )
-from openai.types.beta.threads.message_create_params import Attachment
+from openai.types.beta.threads.message_create_params import (
+    Attachment,
+    MessageContentPartParam,
+)
 from .backend.db import use_db
 from .session import SessionManager
 from .tool import choose_tools
+
+
+class EventType(str, Enum):
+    FUNCTION_CALLING = "function_calling"
+    DRAWING_IMAGE = "drawing_image"
+
+
+class AssistantResponse(TypedDict):
+    event: EventType
+    content: str | None
 
 
 class Ipny:
@@ -19,12 +33,10 @@ class Ipny:
 
     async def chat(
         self,
-        message: str,
+        message: str | MessageContentPartParam,
         *,
         handler: AsyncAssistantEventHandler,
         session_id: str,
-        image_urls: Optional[list[str]] = None,
-        video_urls: Optional[list[str]] = None,
         attachments: Optional[list[Attachment]] = None,
         tools: Optional[list[str]] = [],
     ) -> None:
@@ -34,8 +46,6 @@ class Ipny:
             message (str): The message to send to the assistant.
             handler (AsyncAssistantEventHandler): The event handler.
             session_id (str): The ID of the session.
-            image_urls (list[str], optional): The list of image URLs to include in the conversation. Defaults to None.
-            video_urls (list[str], optional): The list of video URLs to include in the conversation. Defaults to None.
             attachments (list[Attachment], optional): The list of attachments to include in the conversation. Defaults to None.
             tools (list[str], optional): The list of tools to use. Defaults to [].
         """
@@ -53,14 +63,6 @@ class Ipny:
             thread = await self.client.beta.threads.create()
             session.thread_id = thread.id
             need_to_save = True
-
-        if image_urls and len(image_urls) > 0:
-            urls = "\n".join(f"- {image_url}" for image_url in image_urls)
-            message = f"Image URLs:\n{urls}\n{message}"
-
-        if video_urls and len(video_urls) > 0:
-            urls = "\n".join(f"- {video_url}" for video_url in video_urls)
-            message = f"Video URLs:\n{urls}\n{message}"
 
         session(message)
 

@@ -82,7 +82,7 @@ async def get_transcript(video_url: str):
     return tr.text
 
 
-@plugin(name="AD Commentator", icon="🗣️")
+# @plugin(name="AD Commentator", icon="🗣️")
 async def commentate_ad(
     video_url: str,
     *,

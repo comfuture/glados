@@ -1,4 +1,4 @@
-from typing import Annotated, Optional, TypedDict
+from typing import Annotated, Optional, TypedDict, Literal
 from enum import Enum
 from io import BytesIO
 from base64 import b64decode
@@ -13,7 +13,7 @@ __all__ = (
 )
 
 
-@plugin(name="Vision", icon="👁️")
+# @plugin(name="Vision", icon="👁️")
 async def process_image(
     image_url: Annotated[str, "The public URL of the image."],
     prompt: Annotated[
@@ -50,7 +50,16 @@ async def process_image(
         return {"error": str(e)}
 
 
-@plugin(name="dall-e-3", icon="🎨")
+class ImageStyle(Enum):
+    vivid = "vivid"
+    natural = "natural"
+
+
+class ImageResult(TypedDict):
+    url: str
+
+
+# @plugin(name="dall-e-3", icon="🎨")
 async def draw_image(
     prompt: Annotated[
         str,
@@ -64,9 +73,9 @@ async def draw_image(
         ),
     ],
     style: Annotated[
-        Optional[str], Enum("ImageStyle", "vivid natural"), "The style of the image."
+        Optional[Literal["vivid", "natural"]], "The style of the image."
     ] = "natural",
-) -> TypedDict("ImageResult", {"url": str}):
+) -> ImageResult:
     """Draw an image with a prompt."""
     client = AsyncOpenAI()
     ret = await client.images.generate(
@@ -75,4 +84,4 @@ async def draw_image(
     b64string = ret.data[0].b64_json
     image = b64decode(b64string)
     image_url = make_public_url(BytesIO(image), ext="webp")
-    return {"url": image_url}
+    return ImageResult(url=image_url)
