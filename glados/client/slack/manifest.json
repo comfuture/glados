@@ -1,0 +1,77 @@
+{
+  "display_information": {
+    "name": "ipny",
+    "description": "AI Powered assistant",
+    "background_color": "#db6300"
+  },
+  "outgoing_domains": [],
+  "features": {
+    "bot_user": {
+      "display_name": "GLaDOS",
+      "always_online": true
+    },
+    "slash_commands": []
+  },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "chat:write",
+        "im:write",
+        "im:read",
+        "im:history",
+        "reactions:write",
+        "users:read"
+      ],
+      "bot": [
+        "incoming-webhook",
+        "app_mentions:read",
+        "channels:history",
+        "channels:join",
+        "channels:read",
+        "chat:write",
+        "files:read",
+        "files:write",
+        "commands",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "remote_files:share",
+        "groups:history",
+        "reactions:write",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "user_events": [
+        "channel_history_changed",
+        "im_created",
+        "im_open",
+        "message.channels",
+        "message.groups",
+        "message.im",
+        "message.mpim"
+      ],
+      "bot_events": [
+        "app_mention",
+        "im_history_changed",
+        "message.channels",
+        "message.im",
+        "message.mpim"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": true,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
