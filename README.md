@@ -41,6 +41,15 @@ cp .env.dist .env
 
 Run the following command to start the bot.
 
+#### Install the dependencies
+
+```sh
+pip install flit
+flit install -s
+```
+
+#### Run the bot
+
 ```sh
 python main.py --client slack
 ```
