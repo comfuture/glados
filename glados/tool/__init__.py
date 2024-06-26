@@ -142,10 +142,6 @@ async def choose_tools(message: str) -> list[dict] | None:
             for tool_name, impl in __registry__.items()
         ]
     )
-    tool_names += (
-        "\n- file_search: Search and query from files for accurate information."
-    )
-    tool_names += "\n- code_interpreter: Create and run python code. also can process files, evaluate math expressions, etc."
 
     s = Session(model="gpt-3.5-turbo")
     s("Output JSON", role="system")

@@ -179,6 +179,7 @@ class GLaDOS:
         session = await SessionManager.get_session(session_id)
         SessionManager.current = session
 
+        tools = [{"type": "code_interpreter"}, {"type": "file_search"}]
         functions = await choose_tools(message)
         if functions:
             tools.extend(functions)
