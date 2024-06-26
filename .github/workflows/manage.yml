@@ -26,6 +26,7 @@ jobs:
       CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
       PUBLIC_R2_BUCKET_URL: ${{ secrets.PUBLIC_R2_BUCKET_URL }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: create remote context
