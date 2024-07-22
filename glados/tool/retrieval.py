@@ -3,38 +3,42 @@ from typing import Annotated, Optional, Generator
 from bson import ObjectId
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
-from openparse import processing, DocumentParser, Node
+
+# from openparse import processing, DocumentParser, Node
 from glados.backend.db import use_db
 from glados.tool import plugin
 from glados.session import SessionManager
 
 
-def split_documents(filepath: str | os.PathLike) -> Generator[Node, None, None]:
-    """
-    Splits a document into smaller segments using a semantic ingestion pipeline.
+def split_documents(): ...
 
-    Args:
-        filepath (str | os.PathLike): The path to the document file.
 
-    Yields:
-        Node: Each segment of the document.
+# def split_documents(filepath: str | os.PathLike) -> Generator[Node, None, None]:
+#     """
+#     Splits a document into smaller segments using a semantic ingestion pipeline.
 
-    """
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+#     Args:
+#         filepath (str | os.PathLike): The path to the document file.
 
-    semantic_pipeline = processing.SemanticIngestionPipeline(
-        openai_api_key=OPENAI_API_KEY,
-        model="text-embedding-3-small",
-        min_tokens=512,
-        max_tokens=2048,
-    )
-    parser = DocumentParser(
-        # processing_pipeline=semantic_pipeline,
-    )
+#     Yields:
+#         Node: Each segment of the document.
 
-    parsed_content = parser.parse(filepath)
-    for node in parsed_content.nodes:
-        yield node
+#     """
+#     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+#     semantic_pipeline = processing.SemanticIngestionPipeline(
+#         openai_api_key=OPENAI_API_KEY,
+#         model="text-embedding-3-small",
+#         min_tokens=512,
+#         max_tokens=2048,
+#     )
+#     parser = DocumentParser(
+#         # processing_pipeline=semantic_pipeline,
+#     )
+
+#     parsed_content = parser.parse(filepath)
+#     for node in parsed_content.nodes:
+#         yield node
 
 
 async def save_document(

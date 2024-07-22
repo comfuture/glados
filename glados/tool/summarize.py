@@ -2,8 +2,6 @@ import os
 import tempfile
 from typing import Annotated, Optional
 from textwrap import dedent
-from openparse import DocumentParser
-from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 import httpx
 import trafilatura
@@ -11,7 +9,6 @@ from glados.session import SessionManager
 from glados.tool import plugin
 
 openai = AsyncOpenAI()
-claude = AsyncAnthropic(api_key=os.getenv("CLAUDE_API_KEY"))
 
 
 async def get_text_content(file_id: str) -> str:
@@ -32,7 +29,9 @@ async def get_text_content(file_id: str) -> str:
     if ext not in (".pdf", ".txt", ".md"):
         raise ValueError("Unsupported file format.")
 
-    parser = DocumentParser()
+    raise NotImplementedError("This function is not implemented yet.")
+    # parser = DocumentParser()
+    parser = None
 
     file_content = await openai.files.retrieve_content(file_id)
 
@@ -70,19 +69,21 @@ async def summarize(text: str, *, instructions: Optional[str] = None) -> str:
             During the summary, you should follow the instructions of the following instructions.
             Instructions: {instructions}""")
 
-    response = await claude.messages.create(
-        model="claude-3-haiku-20240307",
+    response = await openai.chat.completions.create(
+        model="gpt-4o-mini",
         max_tokens=2000,
         messages=[
+            {"role": "system", "content": "Summarize the text."},
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": f"Text content:\n{text}"},
                     {"type": "text", "text": prompt},
                 ],
-            }
+            },
         ],
     )
+
     return response.content[0].text
 
 
