@@ -84,7 +84,7 @@ async def summarize(text: str, *, instructions: Optional[str] = None) -> str:
         ],
     )
 
-    return response.content[0].text
+    return response.choices[0].message.content
 
 
 async def summarize_recent_file(
