@@ -143,7 +143,7 @@ async def choose_tools(message: str) -> list[dict] | None:
         ]
     )
 
-    s = Session(model="gpt-3.5-turbo")
+    s = Session(model="gpt-4o-mini")
     s("Output JSON", role="system")
     s(
         "To accrate the result, I need to know the tools you want to use.\n"
