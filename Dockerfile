@@ -1,10 +1,9 @@
-FROM python:3.11
+FROM python:3.12
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+ENV UV_SYSTEM_PYTHON=1
 
 ADD . /app
 WORKDIR /app
+RUN uv sync --frozen
 
-ENV FLIT_ROOT_INSTALL=1
-RUN pip install flit
-RUN flit install -s
-
-CMD [ "python", "main.py", "--client=slack" ]
+ENTRYPOINT [ "uv", "run", "main.py", "--client=slack" ]
